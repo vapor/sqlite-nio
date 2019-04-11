@@ -24,7 +24,7 @@ public final class SQLiteConnection {
         let path: String
         switch storage {
         case .memory:
-            path = "file:\(ObjectIdentifier(self))?mode=memory&cache=shared"
+            path = ":memory:"
         case .file(let file):
             path = file
         }
