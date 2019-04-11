@@ -101,4 +101,8 @@ public final class SQLiteConnection {
         }
         return promise.futureResult
     }
+
+    deinit {
+        assert(self.handle == nil, "SQLiteConnection was not closed before deinitializing")
+    }
 }
