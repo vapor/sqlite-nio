@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "nio-sqlite",
+    name: "sqlite-nio",
     products: [
-        .library(name: "NIOSQLite", targets: ["NIOSQLite"]),
+        .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
@@ -14,11 +14,11 @@ let package = Package(
             name: "CSQLite",
             pkgConfig: "sqlite3",
             providers: [
-                .apt(["sqlite"]),
+                .apt(["sqlite3"]),
                 .brew(["sqlite3"])
             ]
         ),
-        .target(name: "NIOSQLite", dependencies: ["CSQLite", "NIO"]),
-        .testTarget(name: "NIOSQLiteTests", dependencies: ["NIOSQLite"]),
+        .target(name: "SQLiteNIO", dependencies: ["CSQLite", "NIO"]),
+        .testTarget(name: "SQLiteNIOTests", dependencies: ["SQLiteNIO"]),
     ]
 )
