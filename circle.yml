@@ -19,7 +19,7 @@ jobs:
       - image: vapor/swift:5.1-bionic
     steps:
       - checkout
-      - run: apt-get install -y sqlite3
+      - run: apt-get update; apt-get install -y sqlite3 libsqlite3-dev
       - run: swift build
       - run: swift test
   bionic-release:
@@ -27,14 +27,14 @@ jobs:
       - image: vapor/swift:5.1-bionic
     steps:
       - checkout
-      - run: apt-get install -y sqlite3
+      - run: apt-get update; apt-get install -y sqlite3 libsqlite3-dev
       - run: swift build -c release
   xenial:
     docker:
       - image: vapor/swift:5.1-xenial
     steps:
       - checkout
-      - run: apt-get install -y sqlite3
+      - run: apt-get update; apt-get install -y sqlite3 libsqlite3-dev
       - run: swift build
       - run: swift test
   xenial-release:
@@ -42,7 +42,7 @@ jobs:
       - image: vapor/swift:5.1-xenial
     steps:
       - checkout
-      - run: apt-get install -y sqlite3
+      - run: apt-get update; apt-get install -y sqlite3 libsqlite3-dev
       - run: swift build -c release
 
 workflows:
