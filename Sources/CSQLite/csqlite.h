@@ -1,5 +1,5 @@
-#ifndef C_NIO_SQLITE_H
-#define C_NIO_SQLITE_H
+#ifndef C_SQLITE_NIO_H
+#define C_SQLITE_NIO_H
 
 #include <sqlite3.h>
 
