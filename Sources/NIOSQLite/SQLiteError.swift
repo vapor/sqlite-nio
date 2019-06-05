@@ -1,11 +1,16 @@
 import CSQLite
+import Foundation
 
-public struct SQLiteError: Error, CustomStringConvertible {
+public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
     public let reason: Reason
     public let message: String
 
     public var description: String {
         return "\(self.reason): \(self.message)"
+    }
+
+    public var errorDescription: String? {
+        return self.description
     }
 
     internal init(reason: Reason, message: String) {
