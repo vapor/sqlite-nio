@@ -14,7 +14,7 @@ let package = Package(
             name: "CSQLite",
             pkgConfig: "sqlite3",
             providers: [
-                .apt(["sqlite"]),
+                .apt(["sqlite3"]),
                 .brew(["sqlite3"])
             ]
         ),
