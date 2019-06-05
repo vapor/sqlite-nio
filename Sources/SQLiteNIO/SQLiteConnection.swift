@@ -32,7 +32,7 @@ public final class SQLiteConnection {
         let promise = eventLoop.makePromise(of: SQLiteConnection.self)
         threadPool.submit { state in
             var handle: OpaquePointer?
-            let options = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
+            let options = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
             if sqlite3_open_v2(path, &handle, options, nil) == SQLITE_OK, sqlite3_busy_handler(handle, { _, _ in 1 }, nil) == SQLITE_OK {
                 let connection = SQLiteConnection(handle: handle, threadPool: threadPool, on: eventLoop)
                 promise.succeed(connection)

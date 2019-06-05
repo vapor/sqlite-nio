@@ -1,7 +1,8 @@
 import XCTest
 
-import NIOSQLiteTests
+import SQLiteNIOTests
 
 var tests = [XCTestCaseEntry]()
-tests += NIOSQLiteTests.allTests()
+tests += SQLiteNIOTests.__allTests()
+
 XCTMain(tests)

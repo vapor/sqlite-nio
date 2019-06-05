@@ -1,7 +1,7 @@
 import XCTest
-import NIOSQLite
+import SQLiteNIO
 
-final class NIOSQLiteTests: XCTestCase {
+final class SQLiteNIOTests: XCTestCase {
     func testExample() throws {
         threadPool.start()
         let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
