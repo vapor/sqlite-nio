@@ -1,5 +1,6 @@
 import NIO
 import CSQLite
+import Logging
 
 public final class SQLiteConnection {
     /// Available SQLite storage methods.
@@ -15,12 +16,18 @@ public final class SQLiteConnection {
     public let eventLoop: EventLoop
     internal var handle: OpaquePointer?
     internal let threadPool: NIOThreadPool
+    private var logger: Logger
 
     public var isClosed: Bool {
         return self.handle == nil
     }
 
-    public static func open(storage: Storage = .memory, threadPool: NIOThreadPool, on eventLoop: EventLoop) -> EventLoopFuture<SQLiteConnection> {
+    public static func open(
+        storage: Storage = .memory,
+        threadPool: NIOThreadPool,
+        logger: Logger = .init(label: "codes.vapor.sqlite-nio.connection"),
+        on eventLoop: EventLoop
+    ) -> EventLoopFuture<SQLiteConnection> {
         let path: String
         switch storage {
         case .memory:
@@ -34,18 +41,26 @@ public final class SQLiteConnection {
             var handle: OpaquePointer?
             let options = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
             if sqlite3_open_v2(path, &handle, options, nil) == SQLITE_OK, sqlite3_busy_handler(handle, { _, _ in 1 }, nil) == SQLITE_OK {
-                let connection = SQLiteConnection(handle: handle, threadPool: threadPool, on: eventLoop)
+                let connection = SQLiteConnection(
+                    handle: handle,
+                    threadPool: threadPool,
+                    logger: logger,
+                    on: eventLoop
+                )
+                logger.debug("Connected to sqlite db: \(path)")
                 promise.succeed(connection)
             } else {
+                logger.error("Failed to connect to sqlite db: \(path)")
                 promise.fail(SQLiteError(reason: .cantOpen, message: "Cannot open SQLite database: \(storage)"))
             }
         }
         return promise.futureResult
     }
 
-    init(handle: OpaquePointer?, threadPool: NIOThreadPool, on eventLoop: EventLoop) {
+    init(handle: OpaquePointer?, threadPool: NIOThreadPool, logger: Logger, on eventLoop: EventLoop) {
         self.handle = handle
         self.threadPool = threadPool
+        self.logger = logger
         self.eventLoop = eventLoop
     }
 
@@ -68,7 +83,12 @@ public final class SQLiteConnection {
         }.map { rows }
     }
 
-    public func query(_ query: String, _ binds: [SQLiteData] = [], _ onRow: @escaping (SQLiteRow) -> Void) -> EventLoopFuture<Void> {
+    public func query(
+        _ query: String,
+        _ binds: [SQLiteData] = [],
+        _ onRow: @escaping (SQLiteRow) throws -> Void
+    ) -> EventLoopFuture<Void> {
+        self.logger.debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
         self.threadPool.submit { state in
             do {
@@ -78,7 +98,7 @@ public final class SQLiteConnection {
                 var callbacks: [EventLoopFuture<Void>] = []
                 while let row = try statement.nextRow(for: columns) {
                     let callback = self.eventLoop.submit {
-                        onRow(row)
+                        try onRow(row)
                     }
                     callbacks.append(callback)
                 }
