@@ -18,7 +18,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
     /// Description of data
     public var description: String {
         switch self {
-        case .blob(let data): return data.debugDescription
+        case .blob(let data): return "<\(data.readableBytes) bytes>"
         case .float(let float): return float.description
         case .integer(let int): return int.description
         case .null: return "null"

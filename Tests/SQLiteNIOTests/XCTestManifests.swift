@@ -7,6 +7,7 @@ extension SQLiteNIOTests {
     // to regenerate.
     static let __allTests__SQLiteNIOTests = [
         ("testExample", testExample),
+        ("testZeroLengthBlob", testZeroLengthBlob),
     ]
 }
 

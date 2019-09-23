@@ -112,13 +112,14 @@ internal struct SQLiteStatement {
             let string = String(cString: val)
             return .text(string)
         case .blob:
-            let blobPointer = sqlite3_column_blob(self.handle, offset)
             let length = Int(sqlite3_column_bytes(self.handle, offset))
             var buffer = ByteBufferAllocator().buffer(capacity: length)
-            buffer.writeBytes(UnsafeBufferPointer(
-                start: blobPointer?.assumingMemoryBound(to: UInt8.self),
-                count: length
-            ))
+            if let blobPointer = sqlite3_column_blob(self.handle, offset) {
+                buffer.writeBytes(UnsafeBufferPointer(
+                    start: blobPointer.assumingMemoryBound(to: UInt8.self),
+                    count: length
+                ))
+            }
             return .blob(buffer)
         case .null: return .null
         }
