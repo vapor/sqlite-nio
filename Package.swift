@@ -13,7 +13,6 @@ let package = Package(
     targets: [
         .systemLibrary(
             name: "CSQLite",
-            pkgConfig: "sqlite3",
             providers: [
                 .apt(["sqlite3"]),
                 .brew(["sqlite3"])
