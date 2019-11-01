@@ -14,7 +14,7 @@ let package = Package(
         .systemLibrary(
             name: "CSQLite",
             providers: [
-                .apt(["sqlite3"]),
+                .apt(["libsqlite3-dev"]),
                 .brew(["sqlite3"])
             ]
         ),
