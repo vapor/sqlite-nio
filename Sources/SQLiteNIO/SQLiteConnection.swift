@@ -17,7 +17,7 @@ public final class SQLiteConnection {
     
     internal var handle: OpaquePointer?
     internal let threadPool: NIOThreadPool
-    internal let logger: Logger
+    public let logger: Logger
     
     public var isClosed: Bool {
         return self.handle == nil
