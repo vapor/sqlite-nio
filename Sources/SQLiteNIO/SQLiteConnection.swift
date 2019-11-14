@@ -14,10 +14,11 @@ public final class SQLiteConnection {
     }
 
     public let eventLoop: EventLoop
+    
     internal var handle: OpaquePointer?
     internal let threadPool: NIOThreadPool
-    private var logger: Logger
-
+    internal let logger: Logger
+    
     public var isClosed: Bool {
         return self.handle == nil
     }
@@ -25,7 +26,7 @@ public final class SQLiteConnection {
     public static func open(
         storage: Storage = .memory,
         threadPool: NIOThreadPool,
-        logger: Logger = .init(label: "codes.vapor.sqlite-nio.connection"),
+        logger: Logger = .init(label: "codes.vapor.sqlite"),
         on eventLoop: EventLoop
     ) -> EventLoopFuture<SQLiteConnection> {
         let path: String
@@ -57,7 +58,12 @@ public final class SQLiteConnection {
         return promise.futureResult
     }
 
-    init(handle: OpaquePointer?, threadPool: NIOThreadPool, logger: Logger, on eventLoop: EventLoop) {
+    init(
+        handle: OpaquePointer?,
+        threadPool: NIOThreadPool,
+        logger: Logger,
+        on eventLoop: EventLoop
+    ) {
         self.handle = handle
         self.threadPool = threadPool
         self.logger = logger
@@ -75,20 +81,25 @@ public final class SQLiteConnection {
             return nil
         }
     }
-
-    public func query(_ query: String, _ binds: [SQLiteData] = []) -> EventLoopFuture<[SQLiteRow]> {
-        var rows: [SQLiteRow] = []
-        return self.query(query, binds) { row in
-            rows.append(row)
-        }.map { rows }
-    }
-
+    
     public func query(
         _ query: String,
         _ binds: [SQLiteData] = [],
-        _ onRow: @escaping (SQLiteRow) throws -> Void
+        logger: Logger? = nil
+    ) -> EventLoopFuture<[SQLiteRow]> {
+        var rows: [SQLiteRow] = []
+        return self.query(query, binds, logger: logger) { row in
+            rows.append(row)
+        }.map { rows }
+    }
+    
+    public func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger? = nil,
+        _ onRow: @escaping (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
-        self.logger.debug("\(query) \(binds)")
+        (logger ?? self.logger).debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
         self.threadPool.submit { state in
             do {
@@ -98,11 +109,11 @@ public final class SQLiteConnection {
                 var callbacks: [EventLoopFuture<Void>] = []
                 while let row = try statement.nextRow(for: columns) {
                     let callback = self.eventLoop.submit {
-                        try onRow(row)
+                        onRow(row)
                     }
                     callbacks.append(callback)
                 }
-                EventLoopFuture<Void>.andAllComplete(callbacks, on: self.eventLoop)
+                EventLoopFuture<Void>.andAllSucceed(callbacks, on: self.eventLoop)
                     .cascade(to: promise)
             } catch {
                 promise.fail(error)
