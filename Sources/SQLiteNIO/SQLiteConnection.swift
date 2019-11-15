@@ -2,7 +2,61 @@ import NIO
 import CSQLite
 import Logging
 
-public final class SQLiteConnection {
+public protocol SQLiteDatabase {
+    var logger: Logger { get }
+    var eventLoop: EventLoop { get }
+    
+    func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void>
+}
+
+extension SQLiteDatabase {
+    public func query(
+        _ query: String,
+        _ binds: [SQLiteData] = [],
+        _ onRow: @escaping (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void> {
+        self.query(query, [], logger: self.logger, onRow)
+    }
+    
+    public func query(
+        _ query: String,
+        _ binds: [SQLiteData] = []
+    ) -> EventLoopFuture<[SQLiteRow]> {
+        var rows: [SQLiteRow] = []
+        return self.query(query, binds, logger: self.logger) { row in
+            rows.append(row)
+        }.map { rows }
+    }
+}
+
+extension SQLiteDatabase {
+    public func logging(to logger: Logger) -> SQLiteDatabase {
+        _SQLiteDatabaseCustomLogger(database: self, logger: logger)
+    }
+}
+
+private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
+    let database: SQLiteDatabase
+    var eventLoop: EventLoop {
+        self.database.eventLoop
+    }
+    let logger: Logger
+    func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void> {
+        self.database.query(query, binds, logger: logger, onRow)
+    }
+}
+
+public final class SQLiteConnection: SQLiteDatabase {
     /// Available SQLite storage methods.
     public enum Storage {
         /// In-memory storage. Not persisted between application launches.
@@ -84,22 +138,11 @@ public final class SQLiteConnection {
     
     public func query(
         _ query: String,
-        _ binds: [SQLiteData] = [],
-        logger: Logger? = nil
-    ) -> EventLoopFuture<[SQLiteRow]> {
-        var rows: [SQLiteRow] = []
-        return self.query(query, binds, logger: logger) { row in
-            rows.append(row)
-        }.map { rows }
-    }
-    
-    public func query(
-        _ query: String,
         _ binds: [SQLiteData],
-        logger: Logger? = nil,
+        logger: Logger,
         _ onRow: @escaping (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
-        (logger ?? self.logger).debug("\(query) \(binds)")
+        logger.debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
         self.threadPool.submit { state in
             do {
