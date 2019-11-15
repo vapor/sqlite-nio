@@ -12,6 +12,8 @@ public protocol SQLiteDatabase {
         logger: Logger,
         _ onRow: @escaping (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void>
+    
+    func withConnection<T>(_: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T>
 }
 
 extension SQLiteDatabase {
@@ -46,6 +48,11 @@ private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
         self.database.eventLoop
     }
     let logger: Logger
+    
+    func withConnection<T>(_ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+        self.database.withConnection(closure)
+    }
+    
     func query(
         _ query: String,
         _ binds: [SQLiteData],
@@ -124,8 +131,13 @@ public final class SQLiteConnection: SQLiteDatabase {
         self.eventLoop = eventLoop
     }
 
-    public var lastAutoincrementID: Int64? {
-        return sqlite3_last_insert_rowid(self.handle)
+    public func lastAutoincrementID() -> EventLoopFuture<Int> {
+        let promise = self.eventLoop.makePromise(of: Int.self)
+        self.threadPool.submit { _ in
+            let rowid = sqlite3_last_insert_rowid(self.handle)
+            promise.succeed(numericCast(rowid))
+        }
+        return promise.futureResult
     }
 
     internal var errorMessage: String? {
@@ -134,6 +146,10 @@ public final class SQLiteConnection: SQLiteDatabase {
         } else {
             return nil
         }
+    }
+    
+    public func withConnection<T>(_ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+        closure(self)
     }
     
     public func query(
