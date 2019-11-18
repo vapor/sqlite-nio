@@ -22,7 +22,7 @@ extension SQLiteDatabase {
         _ binds: [SQLiteData] = [],
         _ onRow: @escaping (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
-        self.query(query, [], logger: self.logger, onRow)
+        self.query(query, binds, logger: self.logger, onRow)
     }
     
     public func query(
