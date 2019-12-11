@@ -23,11 +23,6 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - run: swift test --sanitize=thread
-  catalina:
-    runs-on: macOS-10.15
-    steps:
-    - uses: actions/checkout@v1
-    - run: swift test --enable-test-discovery --sanitize=thread
   ios:
     runs-on: macOS-10.14
     steps:
