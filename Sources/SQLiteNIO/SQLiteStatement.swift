@@ -62,7 +62,7 @@ internal struct SQLiteStatement {
             try columns[self.column(at: i)] = numericCast(i)
         }
 
-        return .init(storage: columns)
+        return .init(offsets: columns)
     }
 
     internal func nextRow(for columns: SQLiteColumns) throws -> SQLiteRow? {
