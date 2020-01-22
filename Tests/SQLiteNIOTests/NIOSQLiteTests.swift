@@ -25,6 +25,7 @@ final class SQLiteNIOTests: XCTestCase {
         let date = Date()
         let rows = try conn.query("SELECT ? as date", [date.sqliteData!]).wait()
         XCTAssertEqual(rows[0].column("date"), .float(date.timeIntervalSince1970))
+        XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.description, date.description)
     }
 
     var threadPool: NIOThreadPool!
