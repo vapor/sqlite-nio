@@ -9,12 +9,22 @@ final class SQLiteNIOTests: XCTestCase {
         let rows = try conn.query("SELECT sqlite_version()").wait()
         print(rows)
     }
+
     func testZeroLengthBlob() throws {
         let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
 
         let rows = try conn.query("SELECT zeroblob(0) as zblob").wait()
         print(rows)
+    }
+
+    func testTimestampStorage() throws {
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        defer { try! conn.close().wait() }
+
+        let date = Date()
+        let rows = try conn.query("SELECT ? as date", [date.sqliteData!]).wait()
+        XCTAssertEqual(rows[0].column("date"), .float(date.timeIntervalSince1970))
     }
 
     var threadPool: NIOThreadPool!
