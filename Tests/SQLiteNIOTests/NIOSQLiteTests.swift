@@ -28,6 +28,16 @@ final class SQLiteNIOTests: XCTestCase {
         XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.description, date.description)
     }
 
+    func testDateStorage() throws {
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        defer { try! conn.close().wait() }
+
+        _ = try conn.query("CREATE TABLE foo (bar DATE)").wait()
+        _ = try conn.query("INSERT INTO foo (bar) VALUES (strftime('%s','2020-01-02'))").wait()
+        let rows = try conn.query("SELECT bar FROM foo").wait()
+        XCTAssertEqual(Date(sqliteData: rows[0].column("bar")!)?.description, "2020-01-02 00:00:00 +0000")
+    }
+
     var threadPool: NIOThreadPool!
     var eventLoopGroup: EventLoopGroup!
     var eventLoop: EventLoop {

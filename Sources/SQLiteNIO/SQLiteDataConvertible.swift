@@ -122,10 +122,14 @@ extension Bool: SQLiteDataConvertible {
 
 extension Date: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
-        guard case .float(let value) = sqliteData else {
+        switch sqliteData {
+        case .integer(let value):
+            self.init(timeIntervalSince1970: Double(value))
+        case .float(let value):
+            self.init(timeIntervalSince1970: value)
+        default:
             return nil
         }
-        self.init(timeIntervalSince1970: value)
     }
 
     public var sqliteData: SQLiteData? {
