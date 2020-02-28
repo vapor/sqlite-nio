@@ -5,7 +5,7 @@ let package = Package(
     name: "sqlite-nio",
     platforms: [
        .macOS(.v10_15),
-       .iOS(.v11)
+       .iOS(.v13)
     ],
     products: [
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
