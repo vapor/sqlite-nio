@@ -1,5 +1,9 @@
 <p align="center">
-    <img src="https://user-images.githubusercontent.com/1342803/58997662-a5209e80-87cb-11e9-859d-e04ec148fd05.png" height="64" alt="SQLiteNIO">
+    <img 
+        src="https://user-images.githubusercontent.com/1342803/58997662-a5209e80-87cb-11e9-859d-e04ec148fd05.png" 
+        height="64" 
+        alt="SQLiteNIO"
+    >
     <br>
     <br>
     <a href="https://docs.vapor.codes/4.0/">
