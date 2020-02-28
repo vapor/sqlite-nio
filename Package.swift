@@ -1,10 +1,10 @@
-// swift-tools-version:5.1
+// swift-tools-version:5.2
 import PackageDescription
 
 let package = Package(
     name: "sqlite-nio",
     platforms: [
-       .macOS(.v10_14),
+       .macOS(.v10_15),
        .iOS(.v11)
     ],
     products: [
@@ -22,7 +22,11 @@ let package = Package(
                 .brew(["sqlite3"])
             ]
         ),
-        .target(name: "SQLiteNIO", dependencies: ["CSQLite", "Logging", "NIO"]),
+        .target(name: "SQLiteNIO", dependencies: [
+            .target(name: "CSQLite"),
+            .product(name: "Logging", package: "swift-log"),
+            .product(name: "NIO", package: "swift-nio"),
+        ]),
         .testTarget(name: "SQLiteNIOTests", dependencies: ["SQLiteNIO"]),
     ]
 )
