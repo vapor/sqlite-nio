@@ -18,16 +18,16 @@ jobs:
     - run: apt update -y; apt install -y libsqlite3-dev
     - uses: actions/checkout@v1
     - run: swift test --enable-test-discovery --sanitize=thread
-  sqlite-nio_catalina:
-    runs-on: macOS-10.15
-    steps:
-    - uses: actions/checkout@v1
-    - run: swift test --sanitize=thread
-  sqlite-nio_ios13:
-    runs-on: macOS-10.15
-    steps:
-    - uses: actions/checkout@v1
-    - run: xcodebuild test -destination 'name=iPhone 11' -scheme 'sqlite-nio'
+  # sqlite-nio_catalina:
+  #   runs-on: macOS-10.15
+  #   steps:
+  #   - uses: actions/checkout@v1
+  #   - run: swift test --sanitize=thread
+  # sqlite-nio_ios13:
+  #   runs-on: macOS-10.15
+  #   steps:
+  #   - uses: actions/checkout@v1
+  #   - run: xcodebuild test -destination 'name=iPhone 11' -scheme 'sqlite-nio'
   sqlite-kit:
     container: 
       image: vapor/swift:5.2
