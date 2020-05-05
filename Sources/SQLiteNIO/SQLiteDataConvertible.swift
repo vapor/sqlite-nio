@@ -122,7 +122,15 @@ extension Bool: SQLiteDataConvertible {
 
 extension Date: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
-        guard case .float(let value) = sqliteData else {
+        let value: Double
+        /* We have to retrieve floats and integers, because apparently SQLite
+         * returns an Integer if the value does not have floating point value. */
+        switch sqliteData {
+        case .float(let v):
+            value = v
+        case .integer(let v):
+            value = Double(v)
+        default:
             return nil
         }
         self.init(timeIntervalSince1970: value)
