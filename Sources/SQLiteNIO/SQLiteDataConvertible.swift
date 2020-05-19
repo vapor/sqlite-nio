@@ -123,8 +123,8 @@ extension Bool: SQLiteDataConvertible {
 extension Date: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         let value: Double
-        /* We have to retrieve floats and integers, because apparently SQLite
-         * returns an Integer if the value does not have floating point value. */
+        // We have to retrieve floats and integers, because apparently SQLite
+        // returns an Integer if the value does not have floating point value.
         switch sqliteData {
         case .float(let v):
             value = v

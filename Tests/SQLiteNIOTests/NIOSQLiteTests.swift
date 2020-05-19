@@ -33,8 +33,8 @@ final class SQLiteNIOTests: XCTestCase {
         defer { try! conn.close().wait() }
 
         let date = Date(timeIntervalSince1970: 42)
-        /* This is how a column of type .date is crated when using Vapor’s
-         * scheme table creation. */
+        // This is how a column of type .date is crated when using Vapor’s
+        // scheme table creation.
         _ = try conn.query(#"CREATE TABLE "test" ("date" DATE NOT NULL);"#).wait()
         _ = try conn.query(#"INSERT INTO test (date) VALUES (?);"#, [date.sqliteData!]).wait()
         let rows = try conn.query("SELECT * FROM test;").wait()
