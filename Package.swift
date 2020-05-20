@@ -3,10 +3,6 @@ import PackageDescription
 
 let package = Package(
     name: "sqlite-nio",
-    platforms: [
-       .macOS(.v10_15),
-       .iOS(.v13)
-    ],
     products: [
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
