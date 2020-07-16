@@ -15,6 +15,19 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
     /// `NULL`.
     case null
 
+    public var integer: Int? {
+        switch self {
+        case .integer(let integer):
+            return integer
+        case .float(let float):
+            return Int(float)
+        case .text(let string):
+            return Int(string)
+        case .blob, .null:
+            return nil
+        }
+    }
+
     /// Description of data
     public var description: String {
         switch self {
