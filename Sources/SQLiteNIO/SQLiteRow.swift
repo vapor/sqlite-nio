@@ -18,7 +18,7 @@ public struct SQLiteRow {
     }
 
     public func column(_ name: String) -> SQLiteData? {
-        guard let offset = self.columnOffsets.lookupTable[name]?.first else {
+        guard let offset = self.columnOffsets.lookupTable[name] else {
             return nil
         }
         return self.data[offset]
@@ -33,14 +33,10 @@ extension SQLiteRow: CustomStringConvertible {
 
 final class SQLiteColumnOffsets {
     let offsets: [(String, Int)]
-    let lookupTable: [String: [Int]]
+    let lookupTable: [String: Int]
 
     init(offsets: [(String, Int)]) {
         self.offsets = offsets
-        var lookupTable: [String: [Int]] = [:]
-        for (name, offset) in self.offsets {
-            lookupTable[name, default: []].append(offset)
-        }
-        self.lookupTable = lookupTable
+        self.lookupTable = .init(offsets, uniquingKeysWith: { a, b in a })
     }
 }

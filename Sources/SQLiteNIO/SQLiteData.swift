@@ -19,10 +19,36 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
         switch self {
         case .integer(let integer):
             return integer
-        case .float(let float):
-            return Int(float)
+        case .float(let double):
+            return Int(double)
         case .text(let string):
             return Int(string)
+        case .blob, .null:
+            return nil
+        }
+    }
+
+    public var double: Double? {
+        switch self {
+        case .integer(let integer):
+            return Double(integer)
+        case .float(let double):
+            return double
+        case .text(let string):
+            return Double(string)
+        case .blob, .null:
+            return nil
+        }
+    }
+
+    public var string: String? {
+        switch self {
+        case .integer(let integer):
+            return String(integer)
+        case .float(let double):
+            return String(double)
+        case .text(let string):
+            return string
         case .blob, .null:
             return nil
         }
