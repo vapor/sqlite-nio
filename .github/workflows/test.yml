@@ -31,7 +31,7 @@ jobs:
           path: dependent
       - name: Use local SQLiteNIO
         run: swift package edit sqlite-nio --path sqlite-nio
-        working-directory: provider
+        working-directory: dependent
       - name: Run tests with Thread Sanitizer
         run: swift test --enable-test-discovery --sanitize=thread
         working-directory: dependent
