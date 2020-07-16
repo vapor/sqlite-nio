@@ -50,8 +50,8 @@ internal struct SQLiteStatement {
         }
     }
 
-    internal func columns() throws -> SQLiteColumns {
-        var columns: [String: Int] = [:]
+    internal func columns() throws -> SQLiteColumnOffsets {
+        var columns: [(String, Int)] = []
 
         let count = sqlite3_column_count(self.handle)
         columns.reserveCapacity(Int(count))
@@ -59,13 +59,13 @@ internal struct SQLiteStatement {
         // iterate over column count and intialize columns once
         // we will then re-use the columns for each row
         for i in 0..<count {
-            try columns[self.column(at: i)] = numericCast(i)
+            try columns.append((self.column(at: i), numericCast(i)))
         }
 
         return .init(offsets: columns)
     }
 
-    internal func nextRow(for columns: SQLiteColumns) throws -> SQLiteRow? {
+    internal func nextRow(for columns: SQLiteColumnOffsets) throws -> SQLiteRow? {
         // step over the query, this will continue to return SQLITE_ROW
         // for as long as there are new rows to be fetched
         let step = sqlite3_step(self.handle)
@@ -89,7 +89,7 @@ internal struct SQLiteStatement {
         for i in 0..<count {
             try row.append(self.data(at: Int32(i)))
         }
-        return SQLiteRow(columns: columns, data: row)
+        return SQLiteRow(columnOffsets: columns, data: row)
     }
 
     // MARK: Private

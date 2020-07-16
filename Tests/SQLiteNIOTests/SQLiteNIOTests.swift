@@ -42,6 +42,21 @@ final class SQLiteNIOTests: XCTestCase {
         XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.description, date.description)
     }
 
+    func testDuplicateColumnName() throws {
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        defer { try! conn.close().wait() }
+
+        let rows = try conn.query("SELECT 1 as foo, 2 as foo").wait()
+        var i = 0
+        for column in rows[0].columns {
+            XCTAssertEqual(column.name, "foo")
+            i += column.data.integer!
+        }
+        XCTAssertEqual(i, 3)
+        XCTAssertEqual(rows[0].column("foo")?.integer, 1)
+        XCTAssertEqual(rows[0].columns.filter { $0.name == "foo" }[1].data.integer, 2)
+    }
+
     var threadPool: NIOThreadPool!
     var eventLoopGroup: EventLoopGroup!
     var eventLoop: EventLoop {

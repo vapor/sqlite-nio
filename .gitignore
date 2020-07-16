@@ -5,4 +5,5 @@
 DerivedData
 .swiftpm
 Package.resolved
+Tests/LinuxMain.swift
 
