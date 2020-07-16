@@ -27,7 +27,7 @@ jobs:
       - name: Check out dependent
         uses: actions/checkout@v2
         with:
-          repository: vapor/${{ matrix.provider }}
+          repository: vapor/${{ matrix.dependent }}
           path: dependent
       - name: Use local SQLiteNIO
         run: swift package edit sqlite-nio --path sqlite-nio
