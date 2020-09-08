@@ -107,7 +107,6 @@ extension Bool: SQLiteDataConvertible {
             }
             self = bool
         }
-    }
 
     public var sqliteData: SQLiteData? {
         return .text(self ? "1" : "0")
