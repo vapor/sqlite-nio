@@ -53,6 +53,14 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
             return nil
         }
     }
+    
+    public var bool: Bool? {
+       switch self.string {
+            case "1": return true
+            case "0": return false
+            default: return nil
+        }
+    }
 
     /// Description of data
     public var description: String {
