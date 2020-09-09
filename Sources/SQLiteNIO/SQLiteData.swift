@@ -55,9 +55,9 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
     }
     
     public var bool: Bool? {
-       switch self.string {
-            case "1": return true
-            case "0": return false
+       switch self.integer {
+            case 1: return true
+            case 0: return false
             default: return nil
         }
     }

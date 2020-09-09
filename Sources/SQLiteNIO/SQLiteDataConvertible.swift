@@ -109,7 +109,7 @@ extension Bool: SQLiteDataConvertible {
         }
 
     public var sqliteData: SQLiteData? {
-        return .text(self ? "1" : "0")
+        return .integer(self ? 1 : 0)
     }
 }
 
