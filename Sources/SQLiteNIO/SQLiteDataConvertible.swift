@@ -102,18 +102,11 @@ extension Data: SQLiteDataConvertible {
 
 extension Bool: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
-        guard case .integer(let value) = sqliteData else {
-            return nil
+        guard let bool = sqliteData.bool else {
+                return nil
+            }
+            self = bool
         }
-        switch value {
-        case 1:
-            self = true
-        case 0:
-            self = false
-        default:
-            return nil
-        }
-    }
 
     public var sqliteData: SQLiteData? {
         return .integer(self ? 1 : 0)
