@@ -1,3 +1,6 @@
+import CSQLite
+import NIO
+
 /// Supported SQLite data types.
 public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
     /// `Int`.
@@ -86,4 +89,38 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
         case .null: try container.encodeNil()
         }
     }
+}
+
+extension SQLiteData {
+	init(sqliteValue: OpaquePointer) {
+		switch sqlite3_value_type(sqliteValue) {
+		case SQLITE_NULL:
+			self = .null
+		case SQLITE_INTEGER:
+			self = .integer(Int(sqlite3_value_int64(sqliteValue)))
+		case SQLITE_FLOAT:
+			self = .float(sqlite3_value_double(sqliteValue))
+		case SQLITE_TEXT:
+			self = .text(String(cString: sqlite3_value_text(sqliteValue)!))
+		case SQLITE_BLOB:
+			if let bytes = sqlite3_value_blob(sqliteValue) {
+				let count = Int(sqlite3_value_bytes(sqliteValue))
+
+				var buffer = ByteBufferAllocator().buffer(capacity: count)
+
+				buffer.writeBytes(UnsafeBufferPointer(
+					start: bytes.assumingMemoryBound(to: UInt8.self),
+					count: count
+				))
+
+
+				self = .blob(buffer) // copy bytes
+			} else {
+				self = .blob(ByteBuffer())
+			}
+		case let type:
+			// Assume a GRDB bug: there is no point throwing any error.
+			fatalError("Unexpected SQLite value type: \(type)")
+		}
+	}
 }

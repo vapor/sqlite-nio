@@ -57,6 +57,25 @@ final class SQLiteNIOTests: XCTestCase {
         XCTAssertEqual(rows[0].columns.filter { $0.name == "foo" }[1].data.integer, 2)
     }
 
+	func testSQLiteValues() throws {
+
+	}
+
+	func testDatabaseFunction() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+
+		let function = DatabaseFunction("my_custom_function") { args in
+			print(args)
+			return args[0].integer! * 3
+		}
+
+		try function.install(in: conn)
+		let rows = try conn.query("SELECT my_custom_function(2) as my_value").wait()
+		print(rows)
+		XCTAssertEqual(rows.first?.column("my_value")?.integer, 6)
+	}
+
     var threadPool: NIOThreadPool!
     var eventLoopGroup: EventLoopGroup!
     var eventLoop: EventLoop {
