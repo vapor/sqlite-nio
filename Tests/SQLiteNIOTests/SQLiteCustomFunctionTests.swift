@@ -196,66 +196,73 @@ class DatabaseFunctionTests: XCTestCase {
 		}
 	}
 
-//	func testFunctionOfOneArgument() throws {
-//		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
-//		defer { try! conn.close().wait() }
-//		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-//			return values.first?.string?.uppercased()
-//		}
-//
-//
-//			db.add(function: fn)
-//			XCTAssertEqual(try String.fetchOne(db, sql: "SELECT upper(?)", arguments: ["Roué"])!, "ROUé")
-//			XCTAssertEqual(try String.fetchOne(db, sql: "SELECT f(?)", arguments: ["Roué"])!, "ROUÉ")
-//			XCTAssertTrue(try String.fetchOne(db, sql: "SELECT f(NULL)") == nil)
-//			do {
-//				try db.execute(sql: "SELECT f()")
-//				XCTFail("Expected error")
-//			} catch let error as DatabaseError {
-//				XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
-//				XCTAssertEqual(error.message!, "wrong number of arguments to function f()")
-//				XCTAssertEqual(error.sql!, "SELECT f()")
-//				XCTAssertEqual(error.description, "SQLite error 1: wrong number of arguments to function f() - while executing `SELECT f()`")
-//			}
-//
-//	}
-/*
-	func testFunctionOfTwoArguments() throws {
-		let dbQueue = try makeDatabaseQueue()
-		let fn = DatabaseFunction("f", argumentCount: 2) { dbValues in
-			let ints = dbValues.compactMap { Int.fromDatabaseValue($0) }
-			return ints.reduce(0, +)
+	func testFunctionOfOneArgument() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
+			return values.first?.string?.uppercased()
 		}
-		try dbQueue.inDatabase { db in
-			db.add(function: fn)
-			XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f(1, 2)")!, 3)
-			do {
-				try db.execute(sql: "SELECT f()")
-				XCTFail("Expected error")
-			} catch let error as DatabaseError {
-				XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
-				XCTAssertEqual(error.message!, "wrong number of arguments to function f()")
-				XCTAssertEqual(error.sql!, "SELECT f()")
-				XCTAssertEqual(error.description, "SQLite error 1: wrong number of arguments to function f() - while executing `SELECT f()`")
-			}
+
+		try conn.install(customFunction: fn).wait()
+
+		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
+									.map { rows in rows[0].column("result")?.string }.wait())
+		XCTAssertEqual("ROUé", try conn.query("SELECT upper(?) as result", [.text("Roué")])
+										.map { rows in rows[0].column("result")?.string }.wait())
+		XCTAssertEqual("ROUÉ", try conn.query("SELECT f(?) as result", [.text("Roué")])
+										.map { rows in rows[0].column("result")?.string }.wait())
+
+		do {
+			_ = try conn.query("SELECT f()").wait()
+		} catch let error as SQLiteError {
+			XCTAssertEqual(error.reason, .error)
+			XCTAssertEqual(error.message, "wrong number of arguments to function f()")
+		}
+	}
+
+	func testFunctionOfTwoArguments() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+
+		let fn = SQLiteCustomFunction("f", argumentCount: 2) { (values: [SQLiteData]) in
+			values
+				.compactMap { $0.integer }
+				.reduce(0, +)
+		}
+
+		try conn.install(customFunction: fn).wait()
+		XCTAssertEqual(3, try conn.query("SELECT f(1, 2) as result")
+										.map { rows in rows[0].column("result")?.integer }.wait())
+
+		do {
+			_ = try conn.query("SELECT f()").wait()
+		} catch let error as SQLiteError {
+			XCTAssertEqual(error.reason, .error)
+			XCTAssertEqual(error.message, "wrong number of arguments to function f()")
 		}
 	}
 
 	func testVariadicFunction() throws {
-		let dbQueue = try makeDatabaseQueue()
-		let fn = DatabaseFunction("f") { dbValues in
-			return dbValues.count
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+
+		let fn = SQLiteCustomFunction("f") { (values: [SQLiteData]) in
+			values.count
 		}
-		try dbQueue.inDatabase { db in
-			db.add(function: fn)
-			XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f()")!, 0)
-			XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f(1)")!, 1)
-			XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f(1, 1)")!, 2)
-		}
+		try conn.install(customFunction: fn).wait()
+
+		XCTAssertEqual(0, try conn.query("SELECT f() as result")
+										.map { rows in rows[0].column("result")?.integer }.wait())
+		XCTAssertEqual(1, try conn.query("SELECT f(1) as result")
+										.map { rows in rows[0].column("result")?.integer }.wait())
+		XCTAssertEqual(2, try conn.query("SELECT f(1, 2) as result")
+										.map { rows in rows[0].column("result")?.integer }.wait())
+		XCTAssertEqual(3, try conn.query("SELECT f(1, 1, 1) as result")
+										.map { rows in rows[0].column("result")?.integer }.wait())
 	}
 
 	// MARK: - Errors
-
+	/*
 	func testFunctionThrowingDatabaseErrorWithMessage() throws {
 		let dbQueue = try makeDatabaseQueue()
 		let fn = DatabaseFunction("f") { dbValues in
