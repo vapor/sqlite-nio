@@ -54,6 +54,7 @@ final class SQLiteNIOTests: XCTestCase {
         }
         XCTAssertEqual(i, 3)
         XCTAssertEqual(rows[0].column("foo")?.integer, 1)
+        XCTAssertEqual(rows[0].columns.filter { $0.name == "foo" }[0].data.integer, 1)
         XCTAssertEqual(rows[0].columns.filter { $0.name == "foo" }[1].data.integer, 2)
     }
 
@@ -61,12 +62,13 @@ final class SQLiteNIOTests: XCTestCase {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
-		_ = try conn.query(#"CREATE TABLE "test" ("score" INTEGER NOT NULL);"#).wait()
-		_ = try conn.query(#"INSERT INTO test (score) VALUES (?), (?), (?);"#, [.integer(3), .integer(4), .integer(5)]).wait()
+		_ = try conn.query(#"CREATE TABLE "scores" ("score" INTEGER NOT NULL);"#).wait()
+		_ = try conn.query(#"INSERT INTO scores (score) VALUES (?), (?), (?);"#, [.integer(3), .integer(4), .integer(5)]).wait()
 
 		struct MyAggregate: DatabaseAggregate {
 			var sum: Int = 0
 			mutating func step(_ dbValues: [SQLiteData]) throws {
+				print(dbValues)
 				sum = sum + (dbValues.first?.integer ?? 0)
 			}
 
@@ -75,18 +77,18 @@ final class SQLiteNIOTests: XCTestCase {
 			}
 		}
 
-		let function = DatabaseFunction("my_sum", aggregate: MyAggregate.self)
+		let function = SQLiteFunction("my_sum", argumentCount: 1, pure: true, aggregate: MyAggregate.self)
 		try function.install(in: conn)
 
-		let rows = try conn.query("SELECT my_sum() as my_sum FROM test").wait()
-		XCTAssertEqual(rows.first?.column("my_sum")?.integer, 10)
+		let rows = try conn.query("SELECT my_sum(score) as total_score FROM scores").wait()
+		XCTAssertEqual(rows.first?.column("total_score")?.integer, 12)
 	}
 
 	func testDatabaseFunction() throws {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
-		let function = DatabaseFunction("my_custom_function") { args in
+		let function = SQLiteFunction("my_custom_function", argumentCount: 1, pure: true) { args in
 			print(args)
 			let result = Int(args[0].integer! * 3)
 			print(result)

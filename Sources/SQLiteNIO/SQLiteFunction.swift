@@ -1,10 +1,7 @@
-import Foundation
 import CSQLite
 
-
-
 /// An SQL function or aggregate.
-public final class DatabaseFunction: Hashable {
+public final class SQLiteFunction: Hashable {
 	// SQLite identifies functions by (name + argument count)
 	private struct Identity: Hashable {
 		let name: String
@@ -123,7 +120,7 @@ public final class DatabaseFunction: Hashable {
 			nil, nil, nil, nil, nil)
 
 		guard code == SQLITE_OK else {
-			// Assume a GRDB bug: there is no point throwing any error.
+			// Assume a bug: there is no point throwing any error.
 			throw SQLiteError(statusCode: code, connection: connection)
 		}
 	}
@@ -186,11 +183,11 @@ public final class DatabaseFunction: Hashable {
 					.fromOpaque(sqlite3_user_data(sqliteContext))
 					.takeUnretainedValue()
 				do {
-					try DatabaseFunction.report(
+					try SQLiteFunction.report(
 						result: definition.compute(argc, argv),
 						in: sqliteContext)
 				} catch {
-					DatabaseFunction.report(error: error, in: sqliteContext)
+					SQLiteFunction.report(error: error, in: sqliteContext)
 				}
 			}
 		}
@@ -200,7 +197,7 @@ public final class DatabaseFunction: Hashable {
 		var xStep: (@convention(c) (OpaquePointer?, Int32, UnsafeMutablePointer<OpaquePointer?>?) -> Void)? {
 			guard case .aggregate = self else { return nil }
 			return { (sqliteContext, argc, argv) in
-				let aggregateContextU = DatabaseFunction.unmanagedAggregateContext(sqliteContext)
+				let aggregateContextU = SQLiteFunction.unmanagedAggregateContext(sqliteContext)
 				let aggregateContext = aggregateContextU.takeUnretainedValue()
 				assert(!aggregateContext.hasErrored) // assert SQLite behavior
 				do {
@@ -210,7 +207,7 @@ public final class DatabaseFunction: Hashable {
 					try aggregateContext.aggregate.step(arguments)
 				} catch {
 					aggregateContext.hasErrored = true
-					DatabaseFunction.report(error: error, in: sqliteContext)
+					SQLiteFunction.report(error: error, in: sqliteContext)
 				}
 			}
 		}
@@ -220,7 +217,7 @@ public final class DatabaseFunction: Hashable {
 		var xFinal: (@convention(c) (OpaquePointer?) -> Void)? {
 			guard case .aggregate = self else { return nil }
 			return { (sqliteContext) in
-				let aggregateContextU = DatabaseFunction.unmanagedAggregateContext(sqliteContext)
+				let aggregateContextU = SQLiteFunction.unmanagedAggregateContext(sqliteContext)
 				let aggregateContext = aggregateContextU.takeUnretainedValue()
 				aggregateContextU.release()
 
@@ -229,11 +226,11 @@ public final class DatabaseFunction: Hashable {
 				}
 
 				do {
-					try DatabaseFunction.report(
+					try SQLiteFunction.report(
 						result: aggregateContext.aggregate.finalize(),
 						in: sqliteContext)
 				} catch {
-					DatabaseFunction.report(error: error, in: sqliteContext)
+					SQLiteFunction.report(error: error, in: sqliteContext)
 				}
 			}
 		}
@@ -309,7 +306,7 @@ public final class DatabaseFunction: Hashable {
 	}
 }
 
-extension DatabaseFunction {
+extension SQLiteFunction {
 	/// :nodoc:
 	public func hash(into hasher: inout Hasher) {
 		hasher.combine(identity)
@@ -317,7 +314,7 @@ extension DatabaseFunction {
 
 	/// Two functions are equal if they share the same name and arity.
 	/// :nodoc:
-	public static func == (lhs: DatabaseFunction, rhs: DatabaseFunction) -> Bool {
+	public static func == (lhs: SQLiteFunction, rhs: SQLiteFunction) -> Bool {
 		lhs.identity == rhs.identity
 	}
 }
