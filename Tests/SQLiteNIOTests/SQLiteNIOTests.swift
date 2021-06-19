@@ -67,9 +67,8 @@ final class SQLiteNIOTests: XCTestCase {
 
 		struct MyAggregate: SQLiteCustomAggregate {
 			var sum: Int = 0
-			mutating func step(_ dbValues: [SQLiteData]) throws {
-				print(dbValues)
-				sum = sum + (dbValues.first?.integer ?? 0)
+			mutating func step(_ values: [SQLiteData]) throws {
+				sum = sum + (values.first?.integer ?? 0)
 			}
 
 			func finalize() throws -> SQLiteDataConvertible? {
@@ -78,7 +77,7 @@ final class SQLiteNIOTests: XCTestCase {
 		}
 
 		let function = SQLiteCustomFunction("my_sum", argumentCount: 1, pure: true, aggregate: MyAggregate.self)
-		_ = try conn.add(customFunction: function).wait()
+		_ = try conn.install(customFunction: function).wait()
 
 		let rows = try conn.query("SELECT my_sum(score) as total_score FROM scores").wait()
 		XCTAssertEqual(rows.first?.column("total_score")?.integer, 12)
@@ -89,15 +88,12 @@ final class SQLiteNIOTests: XCTestCase {
 		defer { try! conn.close().wait() }
 
 		let function = SQLiteCustomFunction("my_custom_function", argumentCount: 1, pure: true) { args in
-			print(args)
 			let result = Int(args[0].integer! * 3)
-			print(result)
 			return SQLiteData.integer(result)
 		}
 
-		_ = try conn.add(customFunction: function).wait()
+		_ = try conn.install(customFunction: function).wait()
 		let rows = try conn.query("SELECT my_custom_function(2) as my_value").wait()
-		print(rows)
 		XCTAssertEqual(rows.first?.column("my_value")?.integer, 6)
 	}
 

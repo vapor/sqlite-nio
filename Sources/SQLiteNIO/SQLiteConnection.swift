@@ -192,7 +192,7 @@ public final class SQLiteConnection: SQLiteDatabase {
         return promise.futureResult
     }
 
-	public func add(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+	public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
 		logger.debug("Adding custom function \(customFunction.name)")
 		let promise = self.eventLoop.makePromise(of: Void.self)
 		self.threadPool.submit { state in
@@ -206,7 +206,7 @@ public final class SQLiteConnection: SQLiteDatabase {
 		return promise.futureResult
 	}
 
-	public func remove(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+	public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
 		logger.debug("Removing custom function \(customFunction.name)")
 		let promise = self.eventLoop.makePromise(of: Void.self)
 		self.threadPool.submit { state in

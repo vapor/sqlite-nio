@@ -287,6 +287,15 @@ public final class SQLiteCustomFunction: Hashable {
 		case .text(let string):
 			sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
 		case .blob(let data):
+//			let length = Int(sqlite3_result_blob(sqliteContext))
+//			var buffer = ByteBufferAllocator().buffer(capacity: length)
+//			if let blobPointer = sqlite3_column_blob(self.handle, offset) {
+//				buffer.writeBytes(UnsafeBufferPointer(
+//					start: blobPointer.assumingMemoryBound(to: UInt8.self),
+//					count: length
+//				))
+//			}
+//			return .blob(buffer)
 			fatalError("not yet impletment")
 //			data.rea
 //			data.withUnsafeBytes {
@@ -336,15 +345,13 @@ extension SQLiteCustomFunction {
 ///         }
 ///     }
 ///
-///     let dbQueue = DatabaseQueue()
-///     let fn = DatabaseFunction("mysum", argumentCount: 1, aggregate: MySum.self)
-///     try dbQueue.write { db in
-///         db.add(function: fn)
-///         try db.execute(sql: "CREATE TABLE test(i)")
-///         try db.execute(sql: "INSERT INTO test(i) VALUES (1)")
-///         try db.execute(sql: "INSERT INTO test(i) VALUES (2)")
-///         try Int.fetchOne(db, sql: "SELECT mysum(i) FROM test")! // 3
-///     }
+///     let connection: SQLiteConnection = ...
+///     let fn = SQLiteCustomFunction("mysum", argumentCount: 1, aggregate: MySum.self)
+///     try connection.install(customFunction: fn).wait()
+///     try connection.query("CREATE TABLE test(i)").wait()
+///     try connection.query("INSERT INTO test(i) VALUES (1)").wait()
+///     try connection.query("INSERT INTO test(i) VALUES (2)").wait()
+///     let sum: Int = try connection.query("SELECT mysum(i) FROM test")!.wait()
 public protocol SQLiteCustomAggregate {
 	/// Creates an aggregate.
 	init()
@@ -361,7 +368,7 @@ public protocol SQLiteCustomAggregate {
 	///    SELECT maxFullNameLength(firstName, lastName) FROM player
 	///
 	/// This method is never called after the finalize() method has been called.
-	mutating func step(_ dbValues: [SQLiteData]) throws
+	mutating func step(_ values: [SQLiteData]) throws
 
 	/// Returns the final result
 	func finalize() throws -> SQLiteDataConvertible?
