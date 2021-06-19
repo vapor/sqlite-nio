@@ -65,6 +65,13 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
         }
     }
 
+	public var isNull: Bool {
+		switch self {
+		case .null: return true
+		default: return false
+		}
+	}
+
     /// Description of data
     public var description: String {
         switch self {
