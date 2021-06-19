@@ -192,6 +192,34 @@ public final class SQLiteConnection: SQLiteDatabase {
         return promise.futureResult
     }
 
+	public func add(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+		logger.debug("Adding custom function \(customFunction.name)")
+		let promise = self.eventLoop.makePromise(of: Void.self)
+		self.threadPool.submit { state in
+			do {
+				try customFunction.install(in: self)
+				promise.succeed(())
+			} catch {
+				promise.fail(error)
+			}
+		}
+		return promise.futureResult
+	}
+
+	public func remove(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+		logger.debug("Removing custom function \(customFunction.name)")
+		let promise = self.eventLoop.makePromise(of: Void.self)
+		self.threadPool.submit { state in
+			do {
+				try customFunction.uninstall(in: self)
+				promise.succeed(())
+			} catch {
+				promise.fail(error)
+			}
+		}
+		return promise.futureResult
+	}
+
     deinit {
         assert(self.handle == nil, "SQLiteConnection was not closed before deinitializing")
     }

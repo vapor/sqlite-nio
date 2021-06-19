@@ -78,7 +78,7 @@ final class SQLiteNIOTests: XCTestCase {
 		}
 
 		let function = SQLiteCustomFunction("my_sum", argumentCount: 1, pure: true, aggregate: MyAggregate.self)
-		try function.install(in: conn)
+		_ = try conn.add(customFunction: function).wait()
 
 		let rows = try conn.query("SELECT my_sum(score) as total_score FROM scores").wait()
 		XCTAssertEqual(rows.first?.column("total_score")?.integer, 12)
@@ -95,7 +95,7 @@ final class SQLiteNIOTests: XCTestCase {
 			return SQLiteData.integer(result)
 		}
 
-		try function.install(in: conn)
+		_ = try conn.add(customFunction: function).wait()
 		let rows = try conn.query("SELECT my_custom_function(2) as my_value").wait()
 		print(rows)
 		XCTAssertEqual(rows.first?.column("my_value")?.integer, 6)

@@ -35,28 +35,27 @@ public final class SQLiteCustomFunction: Hashable {
 	///
 	/// For example:
 	///
-	///     struct MySum: DatabaseAggregate {
+	///     struct MySum: SQLiteCustomAggregate {
 	///         var sum: Int = 0
 	///
-	///         mutating func step(_ dbValues: [DatabaseValue]) {
-	///             if let int = Int.fromDatabaseValue(dbValues[0]) {
+	///         mutating func step(_ values: [SQLiteData]) {
+	///             if let int = dbValues[0].integer {
 	///                 sum += int
 	///             }
 	///         }
 	///
-	///         func finalize() -> DatabaseValueConvertible? {
+	///         func finalize() -> SQLiteDataConvertible? {
 	///             return sum
 	///         }
 	///     }
 	///
-	///     let dbQueue = DatabaseQueue()
-	///     let fn = DatabaseFunction("mysum", argumentCount: 1, aggregate: MySum.self)
-	///     try dbQueue.write { db in
-	///         db.add(function: fn)
-	///         try db.execute(sql: "CREATE TABLE test(i)")
-	///         try db.execute(sql: "INSERT INTO test(i) VALUES (1)")
-	///         try db.execute(sql: "INSERT INTO test(i) VALUES (2)")
-	///         try Int.fetchOne(db, sql: "SELECT mysum(i) FROM test")! // 3
+	///     let connection: SQLiteConnection = ...
+	///     let fn = SQLiteCustomFunction("mysum", argumentCount: 1, aggregate: MySum.self)
+	///     fn.install(in: connection)
+	///     try connection.query("CREATE TABLE test(i)").wait()
+	///     try connection.query("INSERT INTO test(i) VALUES (1)").wait()
+	///     try connection.query("INSERT INTO test(i) VALUES (2)").wait()
+	///     try connection.query("SELECT mysum(i) FROM test").wait()! // 3
 	///     }
 	///
 	/// - parameters:
@@ -85,7 +84,7 @@ public final class SQLiteCustomFunction: Hashable {
 
 	/// Calls sqlite3_create_function_v2
 	/// See https://sqlite.org/c3ref/create_function.html
-	public func install(in connection: SQLiteConnection) throws {
+	func install(in connection: SQLiteConnection) throws {
 		// Retain the function definition
 		let definition = kind.definition
 		let definitionP = Unmanaged.passRetained(definition).toOpaque()
@@ -111,7 +110,7 @@ public final class SQLiteCustomFunction: Hashable {
 	}
 	/// Calls sqlite3_create_function_v2
 	/// See https://sqlite.org/c3ref/create_function.html
-	public func uninstall(in connection: SQLiteConnection) throws {
+	func uninstall(in connection: SQLiteConnection) throws {
 		let code = sqlite3_create_function_v2(
 			connection.handle,
 			identity.name,
