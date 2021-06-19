@@ -65,7 +65,7 @@ final class SQLiteNIOTests: XCTestCase {
 		_ = try conn.query(#"CREATE TABLE "scores" ("score" INTEGER NOT NULL);"#).wait()
 		_ = try conn.query(#"INSERT INTO scores (score) VALUES (?), (?), (?);"#, [.integer(3), .integer(4), .integer(5)]).wait()
 
-		struct MyAggregate: DatabaseAggregate {
+		struct MyAggregate: SQLiteCustomAggregate {
 			var sum: Int = 0
 			mutating func step(_ dbValues: [SQLiteData]) throws {
 				print(dbValues)
@@ -77,7 +77,7 @@ final class SQLiteNIOTests: XCTestCase {
 			}
 		}
 
-		let function = SQLiteFunction("my_sum", argumentCount: 1, pure: true, aggregate: MyAggregate.self)
+		let function = SQLiteCustomFunction("my_sum", argumentCount: 1, pure: true, aggregate: MyAggregate.self)
 		try function.install(in: conn)
 
 		let rows = try conn.query("SELECT my_sum(score) as total_score FROM scores").wait()
@@ -88,7 +88,7 @@ final class SQLiteNIOTests: XCTestCase {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
-		let function = SQLiteFunction("my_custom_function", argumentCount: 1, pure: true) { args in
+		let function = SQLiteCustomFunction("my_custom_function", argumentCount: 1, pure: true) { args in
 			print(args)
 			let result = Int(args[0].integer! * 3)
 			print(result)

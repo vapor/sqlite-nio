@@ -1,7 +1,7 @@
 import CSQLite
 
 /// An SQL function or aggregate.
-public final class SQLiteFunction: Hashable {
+public final class SQLiteCustomFunction: Hashable {
 	// SQLite identifies functions by (name + argument count)
 	private struct Identity: Hashable {
 		let name: String
@@ -72,7 +72,7 @@ public final class SQLiteFunction: Hashable {
 	///       an array of DatabaseValue arguments. The array is guaranteed to
 	///       have exactly *argumentCount* elements, provided *argumentCount* is
 	///       not nil.
-	public init<Aggregate: DatabaseAggregate>(
+	public init<Aggregate: SQLiteCustomAggregate>(
 		_ name: String,
 		argumentCount: Int32? = nil,
 		pure: Bool = false,
@@ -139,17 +139,17 @@ public final class SQLiteFunction: Hashable {
 	/// Feeds the `pApp` parameter of sqlite3_create_function_v2
 	/// http://sqlite.org/capi3ref.html#sqlite3_create_function
 	private class AggregateDefinition {
-		let makeAggregate: () -> DatabaseAggregate
-		init(makeAggregate: @escaping () -> DatabaseAggregate) {
+		let makeAggregate: () -> SQLiteCustomAggregate
+		init(makeAggregate: @escaping () -> SQLiteCustomAggregate) {
 			self.makeAggregate = makeAggregate
 		}
 	}
 
 	/// The current state of an aggregate, storable in SQLite
 	private class AggregateContext {
-		var aggregate: DatabaseAggregate
+		var aggregate: SQLiteCustomAggregate
 		var hasErrored = false
-		init(aggregate: DatabaseAggregate) {
+		init(aggregate: SQLiteCustomAggregate) {
 			self.aggregate = aggregate
 		}
 	}
@@ -161,7 +161,7 @@ public final class SQLiteFunction: Hashable {
 		case function((Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> SQLiteDataConvertible?)
 
 		/// An aggregate: SELECT f(foo) FROM bar GROUP BY baz
-		case aggregate(() -> DatabaseAggregate)
+		case aggregate(() -> SQLiteCustomAggregate)
 
 		/// Feeds the `pApp` parameter of sqlite3_create_function_v2
 		/// http://sqlite.org/capi3ref.html#sqlite3_create_function
@@ -183,11 +183,11 @@ public final class SQLiteFunction: Hashable {
 					.fromOpaque(sqlite3_user_data(sqliteContext))
 					.takeUnretainedValue()
 				do {
-					try SQLiteFunction.report(
+					try SQLiteCustomFunction.report(
 						result: definition.compute(argc, argv),
 						in: sqliteContext)
 				} catch {
-					SQLiteFunction.report(error: error, in: sqliteContext)
+					SQLiteCustomFunction.report(error: error, in: sqliteContext)
 				}
 			}
 		}
@@ -197,7 +197,7 @@ public final class SQLiteFunction: Hashable {
 		var xStep: (@convention(c) (OpaquePointer?, Int32, UnsafeMutablePointer<OpaquePointer?>?) -> Void)? {
 			guard case .aggregate = self else { return nil }
 			return { (sqliteContext, argc, argv) in
-				let aggregateContextU = SQLiteFunction.unmanagedAggregateContext(sqliteContext)
+				let aggregateContextU = SQLiteCustomFunction.unmanagedAggregateContext(sqliteContext)
 				let aggregateContext = aggregateContextU.takeUnretainedValue()
 				assert(!aggregateContext.hasErrored) // assert SQLite behavior
 				do {
@@ -207,7 +207,7 @@ public final class SQLiteFunction: Hashable {
 					try aggregateContext.aggregate.step(arguments)
 				} catch {
 					aggregateContext.hasErrored = true
-					SQLiteFunction.report(error: error, in: sqliteContext)
+					SQLiteCustomFunction.report(error: error, in: sqliteContext)
 				}
 			}
 		}
@@ -217,7 +217,7 @@ public final class SQLiteFunction: Hashable {
 		var xFinal: (@convention(c) (OpaquePointer?) -> Void)? {
 			guard case .aggregate = self else { return nil }
 			return { (sqliteContext) in
-				let aggregateContextU = SQLiteFunction.unmanagedAggregateContext(sqliteContext)
+				let aggregateContextU = SQLiteCustomFunction.unmanagedAggregateContext(sqliteContext)
 				let aggregateContext = aggregateContextU.takeUnretainedValue()
 				aggregateContextU.release()
 
@@ -226,11 +226,11 @@ public final class SQLiteFunction: Hashable {
 				}
 
 				do {
-					try SQLiteFunction.report(
+					try SQLiteCustomFunction.report(
 						result: aggregateContext.aggregate.finalize(),
 						in: sqliteContext)
 				} catch {
-					SQLiteFunction.report(error: error, in: sqliteContext)
+					SQLiteCustomFunction.report(error: error, in: sqliteContext)
 				}
 			}
 		}
@@ -306,7 +306,7 @@ public final class SQLiteFunction: Hashable {
 	}
 }
 
-extension SQLiteFunction {
+extension SQLiteCustomFunction {
 	/// :nodoc:
 	public func hash(into hasher: inout Hasher) {
 		hasher.combine(identity)
@@ -314,7 +314,7 @@ extension SQLiteFunction {
 
 	/// Two functions are equal if they share the same name and arity.
 	/// :nodoc:
-	public static func == (lhs: SQLiteFunction, rhs: SQLiteFunction) -> Bool {
+	public static func == (lhs: SQLiteCustomFunction, rhs: SQLiteCustomFunction) -> Bool {
 		lhs.identity == rhs.identity
 	}
 }
@@ -346,7 +346,7 @@ extension SQLiteFunction {
 ///         try db.execute(sql: "INSERT INTO test(i) VALUES (2)")
 ///         try Int.fetchOne(db, sql: "SELECT mysum(i) FROM test")! // 3
 ///     }
-public protocol DatabaseAggregate {
+public protocol SQLiteCustomAggregate {
 	/// Creates an aggregate.
 	init()
 
