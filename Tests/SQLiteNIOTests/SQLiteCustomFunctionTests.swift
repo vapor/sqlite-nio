@@ -262,76 +262,54 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	// MARK: - Errors
-	/*
-	func testFunctionThrowingDatabaseErrorWithMessage() throws {
-		let dbQueue = try makeDatabaseQueue()
-		let fn = DatabaseFunction("f") { dbValues in
-			throw DatabaseError(message: "custom error message")
+
+	func testFunctionThrowingDatabaseCustomErrorWithMessage() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+
+		struct MyError: Error {
+			let message: String
 		}
-		try dbQueue.inDatabase { db in
-			db.add(function: fn)
-			do {
-				try db.execute(sql: "SELECT f()")
-				XCTFail("Expected DatabaseError")
-			} catch let error as DatabaseError {
-				XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
-				XCTAssertEqual(error.message, "custom error message")
-			}
+
+		let fn = SQLiteCustomFunction("f") { _ in
+			throw MyError(message: "custom message")
+		}
+
+		try conn.install(customFunction: fn).wait()
+
+		do {
+			_ = try conn.query("SELECT f()").wait()
+			XCTFail("Expected Error")
+		} catch let error as MyError {
+			XCTFail("expected this not to match")
+			XCTAssertEqual(error.message, "custom message")
+		} catch let error as SQLiteError {
+
+			XCTAssertEqual(error.reason, .error)
+			XCTAssertEqual(error.message, "MyError(message: \"custom message\")")
 		}
 	}
 
-	func testFunctionThrowingDatabaseErrorWithCode() throws {
-		let dbQueue = try makeDatabaseQueue()
-		let fn = DatabaseFunction("f") { dbValues in
-			throw DatabaseError(resultCode: ResultCode(rawValue: 123))
-		}
-		try dbQueue.inDatabase { db in
-			db.add(function: fn)
-			do {
-				try db.execute(sql: "SELECT f()")
-				XCTFail("Expected DatabaseError")
-			} catch let error as DatabaseError {
-				XCTAssertEqual(error.resultCode.rawValue, 123)
-				XCTAssertEqual(error.message, "unknown error")
-			}
-		}
-	}
-
-	func testFunctionThrowingDatabaseErrorWithMessageAndCode() throws {
-		let dbQueue = try makeDatabaseQueue()
-		let fn = DatabaseFunction("f") { dbValues in
-			throw DatabaseError(resultCode: ResultCode(rawValue: 123), message: "custom error message")
-		}
-		try dbQueue.inDatabase { db in
-			db.add(function: fn)
-			do {
-				try db.execute(sql: "SELECT f()")
-				XCTFail("Expected DatabaseError")
-			} catch let error as DatabaseError {
-				XCTAssertEqual(error.resultCode.rawValue, 123)
-				XCTAssertEqual(error.message, "custom error message")
-			}
-		}
-	}
-
-	func testFunctionThrowingCustomError() throws {
-		let dbQueue = try makeDatabaseQueue()
-		let fn = DatabaseFunction("f") { dbValues in
+	func testFunctionThrowingNSError() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+		let fn = SQLiteCustomFunction("f") { _ in
 			throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message"])
 		}
-		try dbQueue.inDatabase { db in
-			db.add(function: fn)
-			do {
-				try db.execute(sql: "SELECT f()")
-				XCTFail("Expected DatabaseError")
-			} catch let error as DatabaseError {
-				XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
-				XCTAssertTrue(error.message!.contains("CustomErrorDomain"))
-				XCTAssertTrue(error.message!.contains("123"))
-				XCTAssertTrue(error.message!.contains("custom error message"))
-			}
+
+		try conn.install(customFunction: fn).wait()
+
+		do {
+			_ = try conn.query("SELECT f()").wait()
+			XCTFail("Expected Error")
+		} catch let error as SQLiteError {
+
+			XCTAssertEqual(error.reason, .error)
+			XCTAssertTrue(error.message.contains("CustomErrorDomain"))
+			XCTAssertTrue(error.message.contains("123"))
+			XCTAssertTrue(error.message.contains("custom error message"))
 		}
-	}*/
+	}
 
 	// MARK: - Misc
 
@@ -347,6 +325,8 @@ class DatabaseFunctionTests: XCTestCase {
 		x = 321
 		XCTAssertEqual(321, try conn.query("SELECT f() as result").map({ rows in rows[0].column("result")?.integer }).wait())
 	}
+
+	// MARK: - setup
 
 	var threadPool: NIOThreadPool!
 	var eventLoopGroup: EventLoopGroup!
