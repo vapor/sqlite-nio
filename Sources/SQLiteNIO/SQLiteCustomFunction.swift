@@ -7,12 +7,6 @@ public final class SQLiteCustomFunction: Hashable {
 		let name: String
 		let nArg: Int32 // -1 for variadic functions
 	}
-	public struct CustomError: Swift.Error {
-		public let message: String
-		public init(message: String) {
-			self.message = message
-		}
-	}
 
 	/// The name of the SQL function
 	public var name: String { identity.name }
