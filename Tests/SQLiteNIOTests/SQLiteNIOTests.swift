@@ -57,10 +57,6 @@ final class SQLiteNIOTests: XCTestCase {
         XCTAssertEqual(rows[0].columns.filter { $0.name == "foo" }[1].data.integer, 2)
     }
 
-	func testSQLiteValues() throws {
-
-	}
-
 	func testCustomAggregate() throws {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }

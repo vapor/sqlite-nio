@@ -60,6 +60,73 @@ public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
         case bind
         case execute
 
+			var statusCode: Int32 {
+				switch self {
+				case .error:
+					return SQLITE_ERROR
+				case .intern:
+					return SQLITE_INTERNAL
+				case .abort:
+					return SQLITE_ABORT
+				case .permission:
+					return SQLITE_PERM
+				case .busy:
+					return SQLITE_BUSY
+				case .locked:
+					return SQLITE_LOCKED
+				case .noMemory:
+					return SQLITE_NOMEM
+				case .readOnly:
+					return SQLITE_READONLY
+				case .interrupt:
+					return SQLITE_INTERRUPT
+				case .ioError:
+					return SQLITE_IOERR
+				case .corrupt:
+					return SQLITE_CORRUPT
+				case .notFound:
+					return SQLITE_NOTFOUND
+				case .full:
+					return SQLITE_FULL
+				case .cantOpen:
+					return SQLITE_CANTOPEN
+				case .proto:
+					return SQLITE_PROTOCOL
+				case .empty:
+					return SQLITE_EMPTY
+				case .schema:
+					return SQLITE_SCHEMA
+				case .tooBig:
+					return SQLITE_TOOBIG
+				case .constraint:
+					return SQLITE_CONSTRAINT
+				case .mismatch:
+					return SQLITE_MISMATCH
+				case .misuse:
+					return SQLITE_MISUSE
+				case .noLFS:
+					return SQLITE_NOLFS
+				case .auth:
+					return SQLITE_AUTH
+				case .format:
+					return SQLITE_FORMAT
+				case .range:
+					return SQLITE_RANGE
+				case .notADatabase:
+					return SQLITE_NOTADB
+				case .notice:
+					return SQLITE_NOTICE
+				case .warning:
+					return SQLITE_WARNING
+				case .row:
+					return SQLITE_ROW
+				case .done:
+					return SQLITE_DONE
+				case .connection, .close, .prepare, .bind, .execute:
+					return -1
+				}
+			}
+
         internal init(statusCode: Int32) {
             switch statusCode {
             case SQLITE_ERROR:

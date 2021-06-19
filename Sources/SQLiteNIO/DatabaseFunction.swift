@@ -300,17 +300,13 @@ public final class DatabaseFunction: Hashable {
 	}
 
 	private static func report(error: Error, in sqliteContext: OpaquePointer?) {
-//		if let error = error as? DatabaseError {
-//			if let message = error.message {
-//				sqlite3_result_error(sqliteContext, message, -1)
-//			}
-//			sqlite3_result_error_code(sqliteContext, error.extendedResultCode.rawValue)
-//		} else {
-//			sqlite3_result_error(sqliteContext, "\(error)", -1)
-//		}
+		if let error = error as? SQLiteError {
+			sqlite3_result_error(sqliteContext, error.message, -1)
+			sqlite3_result_error_code(sqliteContext, error.reason.statusCode)
+		} else {
+			sqlite3_result_error(sqliteContext, "\(error)", -1)
+		}
 	}
-
-
 }
 
 extension DatabaseFunction {
