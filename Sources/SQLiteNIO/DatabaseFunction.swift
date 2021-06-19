@@ -27,8 +27,8 @@ public final class DatabaseFunction: Hashable {
 		self.identity = Identity(name: name, nArg: argumentCount ?? -1)
 		self.pure = pure
 		self.kind = .function { (argc, argv) in
-			let arguments = (0..<Int(argc)).map { index in
-				SQLiteData(sqliteValue: argv.unsafelyUnwrapped[index]!)
+			let arguments = (0..<Int(argc)).map { index -> SQLiteData in
+				return SQLiteData(sqliteValue: argv.unsafelyUnwrapped[index]!)
 			}
 			return try function(arguments)
 		}
@@ -85,19 +85,6 @@ public final class DatabaseFunction: Hashable {
 		self.pure = pure
 		self.kind = .aggregate { Aggregate() }
 	}
-
-	/// Returns an SQL expression that applies the function.
-	///
-	/// See https://github.com/groue/GRDB.swift/#sql-functions
-//	public func callAsFunction(_ arguments: SQLExpressible...) -> SQLExpression {
-//		switch kind {
-//		case .aggregate:
-//			return .function(name, arguments.map(\.sqlExpression))
-//		case .function:
-//			return .aggregate(name, arguments.map(\.sqlExpression))
-//		}
-//	}
-
 
 	/// Calls sqlite3_create_function_v2
 	/// See https://sqlite.org/c3ref/create_function.html
@@ -294,20 +281,22 @@ public final class DatabaseFunction: Hashable {
 	}
 
 	private static func report(result: SQLiteDataConvertible?, in sqliteContext: OpaquePointer?) {
-//		switch result?.sqliteData ?? .null {
-//		case .null:
-//			sqlite3_result_null(sqliteContext)
-//		case .integer(let int64):
-//			sqlite3_result_int64(sqliteContext, int64)
-//		case .float(let double):
-//			sqlite3_result_double(sqliteContext, double)
-//		case .text(let string):
-//			sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
-//		case .blob(let data):
+		switch result?.sqliteData ?? .null {
+		case .null:
+			sqlite3_result_null(sqliteContext)
+		case .integer(let int64):
+			sqlite3_result_int64(sqliteContext, Int64(int64))
+		case .float(let double):
+			sqlite3_result_double(sqliteContext, double)
+		case .text(let string):
+			sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
+		case .blob(let data):
+			fatalError("not yet impletment")
+//			data.rea
 //			data.withUnsafeBytes {
 //				sqlite3_result_blob(sqliteContext, $0.baseAddress, Int32($0.count), SQLITE_TRANSIENT)
 //			}
-//		}
+		}
 	}
 
 	private static func report(error: Error, in sqliteContext: OpaquePointer?) {

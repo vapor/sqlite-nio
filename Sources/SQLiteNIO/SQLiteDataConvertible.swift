@@ -43,6 +43,16 @@ extension UInt16: SQLiteDataConvertible { }
 extension UInt32: SQLiteDataConvertible { }
 extension UInt64: SQLiteDataConvertible { }
 
+extension SQLiteData: SQLiteDataConvertible {
+	public init?(sqliteData: SQLiteData) {
+		self = sqliteData
+	}
+
+	public var sqliteData: SQLiteData? {
+		return self
+	}
+}
+
 extension Double: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         guard case .float(let value) = sqliteData else {
