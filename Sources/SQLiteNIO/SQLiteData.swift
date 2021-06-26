@@ -65,10 +65,21 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
         }
     }
 
+	public var blob: ByteBuffer? {
+		switch self {
+		case .blob(let buffer):
+			return buffer
+		case .integer, .float, .text, .null:
+			return nil
+		}
+	}
+
 	public var isNull: Bool {
 		switch self {
-		case .null: return true
-		default: return false
+		case .null:
+			return true
+		case .integer, .float, .text, .blob:
+			return false
 		}
 	}
 

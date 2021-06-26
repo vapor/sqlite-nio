@@ -286,21 +286,10 @@ public final class SQLiteCustomFunction: Hashable {
 			sqlite3_result_double(sqliteContext, double)
 		case .text(let string):
 			sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
-		case .blob(let data):
-//			let length = Int(sqlite3_result_blob(sqliteContext))
-//			var buffer = ByteBufferAllocator().buffer(capacity: length)
-//			if let blobPointer = sqlite3_column_blob(self.handle, offset) {
-//				buffer.writeBytes(UnsafeBufferPointer(
-//					start: blobPointer.assumingMemoryBound(to: UInt8.self),
-//					count: length
-//				))
-//			}
-//			return .blob(buffer)
-			fatalError("not yet impletment")
-//			data.rea
-//			data.withUnsafeBytes {
-//				sqlite3_result_blob(sqliteContext, $0.baseAddress, Int32($0.count), SQLITE_TRANSIENT)
-//			}
+		case .blob(let value):
+			value.withUnsafeReadableBytes { pointer in
+				sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.readableBytes), SQLITE_TRANSIENT)
+			}
 		}
 	}
 

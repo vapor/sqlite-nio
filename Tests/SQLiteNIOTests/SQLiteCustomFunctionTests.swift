@@ -150,18 +150,23 @@ class DatabaseFunctionTests: XCTestCase {
 										.map { rows in rows[0].column("result")?.string }.wait())
 	}
 
-//	func testFunctionArgumentBlob() throws {
-//		let dbQueue = try makeDatabaseQueue()
-//		let fn = DatabaseFunction("f", argumentCount: 1) { (dbValues: [DatabaseValue]) in
-//			return Data.fromDatabaseValue(dbValues[0])
-//		}
-//		try dbQueue.inDatabase { db in
-//			db.add(function: fn)
-//			XCTAssertTrue(try Data.fetchOne(db, sql: "SELECT f(NULL)") == nil)
-//			XCTAssertEqual(try Data.fetchOne(db, sql: "SELECT f(?)", arguments: ["foo".data(using: .utf8)])!, "foo".data(using: .utf8))
-//			XCTAssertEqual(try Data.fetchOne(db, sql: "SELECT f(?)", arguments: [Data()])!, Data())
-//		}
-//	}
+	func testFunctionArgumentBlob() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
+			return values[0].blob
+		}
+		try conn.install(customFunction: fn).wait()
+
+		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
+									.map { rows in rows[0].column("result")?.blob }.wait())
+
+		XCTAssertEqual("foo".data(using: .utf8)!.sqliteData!.blob, try conn.query("SELECT f(?) as result", ["foo".data(using: .utf8)!.sqliteData!])
+									.map { rows in rows[0].column("result")?.blob }.wait())
+
+		XCTAssertEqual(ByteBuffer(), try conn.query("SELECT f(?) as result", [.blob(ByteBuffer())])
+										.map { rows in rows[0].column("result")?.blob }.wait())
+	}
 
 	func testFunctionArgumentCustomValueType() throws {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
