@@ -64,16 +64,20 @@ class DatabaseFunctionTests: XCTestCase {
 		XCTAssertEqual("foo", try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.string }.wait())
 	}
 
-//	func testFunctionReturningData() throws {
-//		let dbQueue = try makeDatabaseQueue()
-//		let fn = DatabaseFunction("f", argumentCount: 0) { dbValues in
-//			return "foo".data(using: .utf8)
-//		}
-//		try dbQueue.inDatabase { db in
-//			db.add(function: fn)
-//			XCTAssertEqual(try Data.fetchOne(db, sql: "SELECT f()")!, "foo".data(using: .utf8))
-//		}
-//	}
+	func testFunctionReturningData() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+		let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in
+			return "foo".data(using: .utf8)
+		}
+		try conn.install(customFunction: fn).wait()
+
+		XCTAssertEqual("foo".data(using: .utf8)!.sqliteData!.blob!,
+									 try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.blob }.wait())
+
+		XCTAssertNotEqual("bar".data(using: .utf8)!.sqliteData!.blob!,
+									 try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.blob }.wait())
+	}
 
 	func testFunctionReturningCustomValueType() throws {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
