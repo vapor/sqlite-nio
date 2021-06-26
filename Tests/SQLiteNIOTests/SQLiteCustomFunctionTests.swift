@@ -316,7 +316,11 @@ class DatabaseFunctionTests: XCTestCase {
 			XCTAssertEqual(error.reason, .error)
 			XCTAssertTrue(error.message.contains("CustomErrorDomain"))
 			XCTAssertTrue(error.message.contains("123"))
-			XCTAssertTrue(error.message.contains("custom error message"))
+			#if os(Linux)
+			XCTAssertTrue(error.message.contains("(null)"), "expected '\(error.message)' to contain '(null)'")
+			#else
+			XCTAssertTrue(error.message.contains("custom error message"), "expected '\(error.message)' to contain 'custom error message'")
+			#endif
 		}
 	}
 
