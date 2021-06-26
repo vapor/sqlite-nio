@@ -48,8 +48,8 @@ jobs:
           - swift:5.3-amazonlinux2
           - swift:5.4-focal
           - swift:5.4-amazonlinux2
-          - swiftlang/swift:nightly-5.5-focal
-          - swiftlang/swift:nightly-5.5-amazonlinux2
+          #- swiftlang/swift:nightly-5.5-focal
+          #- swiftlang/swift:nightly-5.5-amazonlinux2
     container: ${{ matrix.image }}
     steps:
       - name: Install Ubuntu dependencies
