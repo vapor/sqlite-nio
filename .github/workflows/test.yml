@@ -4,8 +4,6 @@ on:
   push: 
     branches: 
       - main
-env:
-  LOG_LEVEL: info
 defaults:
   run:
     shell: bash
@@ -44,13 +42,10 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - swift:5.2-bionic
           - swift:5.2-focal
           - swift:5.2-amazonlinux2
-          - swift:5.3-bionic
           - swift:5.3-focal
           - swift:5.3-amazonlinux2
-          - swift:5.4-bionic
           - swift:5.4-focal
           - swift:5.4-amazonlinux2
           - swiftlang/swift:nightly-5.5-focal
