@@ -207,7 +207,7 @@ public final class SQLiteConnection: SQLiteDatabase {
 	}
 
 	public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-		logger.debug("Removing custom function \(customFunction.name)")
+		logger.trace("Removing custom function \(customFunction.name)")
 		let promise = self.eventLoop.makePromise(of: Void.self)
 		self.threadPool.submit { state in
 			do {
