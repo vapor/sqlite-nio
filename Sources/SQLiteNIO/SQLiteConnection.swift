@@ -193,7 +193,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
 
 	public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-		logger.debug("Adding custom function \(customFunction.name)")
+		logger.trace("Adding custom function \(customFunction.name)")
 		let promise = self.eventLoop.makePromise(of: Void.self)
 		self.threadPool.submit { state in
 			do {
