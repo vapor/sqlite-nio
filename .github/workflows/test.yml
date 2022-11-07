@@ -1,89 +1,127 @@
 name: test
 on:
-  pull_request:
-  push: 
-    branches: 
-      - main
-defaults:
-  run:
-    shell: bash
+  pull_request: { branches: ['*'] }
+  push: { branches: [ main ] }
+
+env:
+  LOG_LEVEL: debug
+  SWIFT_DETERMINISTIC_HASHING: 1
 
 jobs:
-  dependents:
+
+  codecov:
     runs-on: ubuntu-latest
-    container: swift:5.4-focal
-    strategy:
-      fail-fast: false
-      matrix:
-        dependent:
-          - sqlite-kit
-          - fluent-sqlite-driver
+    container: swift:5.7-jammy
     steps:
-      - name: Install dependencies
+      # N.B.: When we switch to embedded SQLite, these first two steps should be removed,
+      # and the version saved to the environment should come from the checked-out package.
+      - name: Install libsqlite3 dependency
         run: apt-get -q update && apt-get -q install -y libsqlite3-dev
-      - name: Check out SQLiteNIO
-        uses: actions/checkout@v2
+      - name: Save SQLite version to env
+        run: |
+          echo SQLITE_VERSION="$(pkg-config --modversion sqlite3)" >> $GITHUB_ENV
+      - name: Check out package
+        uses: actions/checkout@v3
+      - name: Run local tests with coverage
+        run: swift test --enable-code-coverage
+      - name: Submit coverage report to Codecov.io
+        uses: vapor/swift-codecov-action@v0.2
+        with:
+          cc_flags: 'unittests'
+          cc_env_vars: 'SWIFT_VERSION,SWIFT_PLATFORM,RUNNER_OS,RUNNER_ARCH,SQLITE_VERSION'
+          cc_fail_ci_if_error: true
+          cc_verbose: true
+          cc_dry_run: false
+
+  # Check for API breakage versus main
+  api-breakage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: swift:5.7-jammy
+    steps:
+      - name: Install libsqlite3 dependency
+        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
+      - name: Check out package
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      # https://github.com/actions/checkout/issues/766
+      - name: Mark the workspace as safe
+        run: git config --global --add safe.directory ${GITHUB_WORKSPACE}
+      - name: Check for API breaking changes
+        run: swift package diagnose-api-breaking-changes origin/main
+
+  # Make sure downstream dependents still work
+  dependents-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: swift:5.7-jammy
+    steps:
+      - name: Install libsqlite3 dependency
+        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
+      - name: Check out package
+        uses: actions/checkout@v3
         with:
           path: sqlite-nio
-      - name: Check out dependent
-        uses: actions/checkout@v2
+      - name: Check out SQLKit driver
+        uses: actions/checkout@v3
         with:
-          repository: vapor/${{ matrix.dependent }}
-          path: dependent
-      - name: Use local SQLiteNIO
-        run: swift package edit sqlite-nio --path ../sqlite-nio
-        working-directory: dependent
-      - name: Run tests with Thread Sanitizer
-        run: swift test --enable-test-discovery --sanitize=thread
-        working-directory: dependent
-  linux:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - swift:5.2-focal
-          - swift:5.2-amazonlinux2
-          - swift:5.3-focal
-          - swift:5.3-amazonlinux2
-          - swift:5.4-focal
-          - swift:5.4-amazonlinux2
-          #- swiftlang/swift:nightly-5.5-focal
-          #- swiftlang/swift:nightly-5.5-amazonlinux2
-    container: ${{ matrix.image }}
-    steps:
-      - name: Install Ubuntu dependencies
-        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
-        if: ${{ endsWith(matrix.image, 'bionic') || endsWith(matrix.image, 'focal') }}
-      - name: Update AmazonLinux2's too-old SQLite and compensate for its Postgres
-        if: ${{ endsWith(matrix.image, 'amazonlinux2') }}
-        working-directory: /root
-        # Cribbed from the Fedora RPM, leaves out a lot. System's Tcl is too old to run SQLite's tests.
+          repository: vapor/sqlite-kit
+          path: sqlite-kit
+      - name: Check out FluentKit driver
+        uses: actions/checkout@v3
+        with:
+          repository: vapor/fluent-sqlite-driver
+          path: fluent-sqlite-driver
+      - name: Tell dependents to use local checkout
         run: |
-          yum install -y sqlite-devel
-          yum install -y file tcl-devel make
-          curl -L 'https://www.sqlite.org/src/tarball/sqlite.tar.gz?r=release' | tar xz && cd sqlite
-          export CFLAGS="-DSQLITE_DISABLE_DIRSYNC=1 -DSQLITE_SECURE_DELETE=1"
-          ./configure --prefix=/usr --libdir=/usr/lib64 --enable-fts3 --enable-all --with-tcl=/usr/lib64
-          make all install
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Run tests with Thread Sanitizer
-        run: swift test --enable-test-discovery --sanitize=thread
-  macos:
-    runs-on: macos-latest
+          swift package --package-path sqlite-kit edit sqlite-nio --path sqlite-nio
+          swift package --package-path fluent-sqlite-driver edit sqlite-nio --path sqlite-nio
+      - name: Run SQLiteKit tests with Thread Sanitizer
+        run: swift test --package-path sqlite-kit --sanitize=thread
+      - name: Run FluentSQLiteDriver tests with Thread Sanitizer
+        run: swift test --package-path fluent-sqlite-driver --sanitize=thread
+
+  # Run unit tests (Linux)
+  linux-unit:
+    if: github.event_name == 'pull_request'
     strategy:
       fail-fast: false
       matrix:
+        runner:
+          - swift:5.5-bionic
+          - swift:5.6-focal
+          - swift:5.7-jammy
+          - swiftlang/swift:nightly-main-jammy
+    container: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install libsqlite3 dependency
+        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Run tests with Thread Sanitizer
+        run: swift test --sanitize=thread
+
+
+  # Run unit tests (macOS).
+  macos-unit:
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        macos:
+          - macos-11
+          - macos-12
         xcode:
-          - latest
           - latest-stable
+    runs-on: ${{ matrix.macos }}
     steps:
       - name: Select latest available Xcode
         uses: maxim-lobanov/setup-xcode@v1
-        with:
+        with: 
           xcode-version: ${{ matrix.xcode }}
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: Check out code
+        uses: actions/checkout@v3
       - name: Run tests with Thread Sanitizer
-        run: swift test --enable-test-discovery --sanitize=thread
+        run: swift test --sanitize=thread
