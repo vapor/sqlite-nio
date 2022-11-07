@@ -1,5 +1,6 @@
 import XCTest
 import SQLiteNIO
+import Logging
 
 final class SQLiteNIOTests: XCTestCase {
     func testBasicConnection() throws {
@@ -84,18 +85,30 @@ final class SQLiteNIOTests: XCTestCase {
 
     var threadPool: NIOThreadPool!
     var eventLoopGroup: EventLoopGroup!
-    var eventLoop: EventLoop {
-        return self.eventLoopGroup.next()
-    }
+    var eventLoop: EventLoop { return self.eventLoopGroup.any() }
 
-    override func setUp() {
-        self.threadPool = .init(numberOfThreads: 8)
+    override func setUpWithError() throws {
+        self.threadPool = .init(numberOfThreads: 1)
         self.threadPool.start()
-        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 8)
+        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        XCTAssert(isLoggingConfigured)
     }
+    
+    override func tearDownWithError() throws {
+        try self.threadPool.syncShutdownGracefully()
+        try self.eventLoopGroup.syncShutdownGracefully()
+    }
+}
 
-    override func tearDown() {
-        try! self.threadPool.syncShutdownGracefully()
-        try! self.eventLoopGroup.syncShutdownGracefully()
+let isLoggingConfigured: Bool = {
+    LoggingSystem.bootstrap { label in
+        var handler = StreamLogHandler.standardOutput(label: label)
+        handler.logLevel = env("LOG_LEVEL").flatMap { Logger.Level(rawValue: $0) } ?? .info
+        return handler
     }
+    return true
+}()
+
+func env(_ name: String) -> String? {
+    ProcessInfo.processInfo.environment[name]
 }
