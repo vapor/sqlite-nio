@@ -26,6 +26,8 @@ final class SQLiteNIOTests: XCTestCase {
         let rows = try conn.query("SELECT ? as date", [date.sqliteData!]).wait()
         XCTAssertEqual(rows[0].column("date"), .float(date.timeIntervalSince1970))
         XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.description, date.description)
+        XCTAssertEqual(Date(sqliteData: rows[0].column("date")!), date)
+        XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.timeIntervalSinceReferenceDate, date.timeIntervalSinceReferenceDate)
     }
 
     func testTimestampStorageInDateColumnIntegralValue() throws {
