@@ -30,6 +30,29 @@ final class SQLiteNIOTests: XCTestCase {
         XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.timeIntervalSinceReferenceDate, date.timeIntervalSinceReferenceDate)
     }
 
+    func testTimestampStorageRoundToMicroseconds() throws {
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        defer { try! conn.close().wait() }
+
+        // Test value that when read back out of sqlite results in 7 decimal places that we need to round to microseconds
+        let date = Date(timeIntervalSinceReferenceDate: 689658914.293192)
+        let rows = try conn.query("SELECT ? as date", [date.sqliteData!]).wait()
+        XCTAssertEqual(rows[0].column("date"), .float(date.timeIntervalSince1970))
+        XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.description, date.description)
+        XCTAssertEqual(Date(sqliteData: rows[0].column("date")!), date)
+        XCTAssertEqual(Date(sqliteData: rows[0].column("date")!)?.timeIntervalSinceReferenceDate, date.timeIntervalSinceReferenceDate)
+    }
+
+    func testDateRoundToMicroseconds() throws {
+        let secondsSinceUnixEpoch = 1667950774.6214828
+        let secondsSinceSwiftReference = 689643574.621483
+        let timestamp = SQLiteData.float(secondsSinceUnixEpoch)
+        let date = try XCTUnwrap(Date(sqliteData: timestamp))
+        XCTAssertEqual(date.timeIntervalSince1970, secondsSinceUnixEpoch)
+        XCTAssertEqual(date.timeIntervalSinceReferenceDate, secondsSinceSwiftReference)
+        XCTAssertEqual(date.sqliteData, .float(secondsSinceUnixEpoch))
+    }
+
     func testTimestampStorageInDateColumnIntegralValue() throws {
         let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
