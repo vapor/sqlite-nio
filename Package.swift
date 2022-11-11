@@ -102,7 +102,7 @@ let cSQLiteSettings: [CSetting] = [
 let cSQLiteSettings: [CSetting] = [
     .define("SQLITE_MAX_SCHEMA_RETRY", to: "25"),
     .define("SQLITE_MAX_VARIABLE_NUMBER", to: "250000"),
-    .define("SQLITE_THREADSAFE", to: "2"),
+    .define("SQLITE_THREADSAFE", to: "1"),
     .define("SQLITE_ENABLE_COLUMN_METADATA"),
     .define("SQLITE_ENABLE_DBSTAT_VTAB"),
     .define("SQLITE_ENABLE_FTS3"),
