@@ -1,0 +1,2 @@
+// This directory is derived from SQLite downloaded from https://sqlite.org/2022/sqlite-amalgamation-3390400.zip
+3.39.4.0
