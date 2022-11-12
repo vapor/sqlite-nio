@@ -130,6 +130,14 @@ public final class SQLiteConnection: SQLiteDatabase {
         self.logger = logger
         self.eventLoop = eventLoop
     }
+    
+    public static func libraryVersion() -> Int32 {
+        sqlite3_libversion_number()
+    }
+    
+    public static func libraryVersionString() -> String {
+        String(cString: sqlite3_libversion())
+    }
 
     public func lastAutoincrementID() -> EventLoopFuture<Int> {
         let promise = self.eventLoop.makePromise(of: Int.self)
