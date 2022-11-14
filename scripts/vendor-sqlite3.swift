@@ -49,10 +49,10 @@ let unzip: URL!
 let sqlite3: URL!
 let sha3sum: URL!
 do {
-    unzip = try ensureExecutable("unzip")
-    sqlite3 = try ensureExecutable("sqlite3")
-    sha3sum = try ensureExecutable("sha3sum")
-    try main()
+    unzip = try await ensureExecutable("unzip")
+    sqlite3 = try await ensureExecutable("sqlite3")
+    sha3sum = try await ensureExecutable("sha3sum")
+    try await main()
 } catch let error as String {
     print(error)
     exit(-1)
@@ -60,7 +60,7 @@ do {
 
 // MARK: Main
 
-func main() throws {
+func main() async throws {
     var args = CommandLine.arguments[...]
     _ = args.popFirst()
     guard !args.contains(where: { $0 == "-h" || $0 == "--help" }),
@@ -70,9 +70,9 @@ func main() throws {
     }
 
     switch command {
-        case "bump-latest-version": try bumpVersion(args)
-        case "print-system-sqlite-options": try printSystemSQLiteCompileOptions(args)
-        case "update-version": try updateVersion(args)
+        case "bump-latest-version": try await bumpVersion(args)
+        case "print-system-sqlite-options": try await printSystemSQLiteCompileOptions(args)
+        case "update-version": try await updateVersion(args)
         default: throw usage
     }
 }
@@ -80,12 +80,12 @@ func main() throws {
 // MARK: Commands
 
 /// bump-latest-version
-func bumpVersion(_ args: ArraySlice<String>) throws {
+func bumpVersion(_ args: ArraySlice<String>) async throws {
     let force = args.contains(where: { $0 == "-f" || $0 == "--force" })
 
     let currentVersion = Version(from: versionFile)
     let sqliteDownloadURL = URL(string: "\(sqliteURL)/download.html")!
-    let data = try httpGet(from: sqliteDownloadURL)
+    let (data, _) = try await URLSession.shared.data(from: sqliteDownloadURL)
     guard let content = String(data: data, encoding: .utf8) else {
         throw "Invalid data returned from \(sqliteDownloadURL)"
     }
@@ -111,7 +111,7 @@ func bumpVersion(_ args: ArraySlice<String>) throws {
             return
         }
     }
-    try downloadAndUnzipSQLite(
+    try await downloadAndUnzipSQLite(
         from: product.downloadURL,
         to: product.filename,
         expectedSize: product.sizeInBytes,
@@ -122,11 +122,11 @@ func bumpVersion(_ args: ArraySlice<String>) throws {
 }
 
 /// print-system-sqlite-options
-func printSystemSQLiteCompileOptions(_ args: ArraySlice<String>) throws {
-    guard let compileOptions = try subprocess(sqlite3, [":memory:", "PRAGMA compile_options;"], captureStdout: true) else {
+func printSystemSQLiteCompileOptions(_ args: ArraySlice<String>) async throws {
+    guard let compileOptions = try await subprocess(sqlite3, [":memory:", "PRAGMA compile_options;"], captureStdout: true) else {
         throw "Unknown sqlite3 compile options"
     }
-    guard let sqliteVersion = try subprocess(sqlite3, ["--version"], captureStdout: true) else {
+    guard let sqliteVersion = try await subprocess(sqlite3, ["--version"], captureStdout: true) else {
         throw "Unknown sqlite3 version"
     }
 
@@ -157,7 +157,7 @@ func printSystemSQLiteCompileOptions(_ args: ArraySlice<String>) throws {
 }
 
 /// update-version
-func updateVersion(_ args: ArraySlice<String>) throws {
+func updateVersion(_ args: ArraySlice<String>) async throws {
     var args = args
     let yearVersion = args.popFirst()
     guard let yearAndVersion = yearVersion?.split(separator: "/"),
@@ -170,7 +170,7 @@ func updateVersion(_ args: ArraySlice<String>) throws {
     let currentVersion = Version(from: versionFile)
     let filename = "sqlite-amalgamation-\(version.asDownloadVersion).zip"
     let sqliteDownloadURL = URL(string: "\(sqliteURL)/\(year)/\(filename)")!
-    try downloadAndUnzipSQLite(from: sqliteDownloadURL, to: filename, expectedSize: nil, expectedSha3Sum: nil)
+    try await downloadAndUnzipSQLite(from: sqliteDownloadURL, to: filename, expectedSize: nil, expectedSha3Sum: nil)
     try version.stamp(from: sqliteDownloadURL)
     print("Upgraded from \(String(describing: currentVersion)) to \(version)")
 }
@@ -277,32 +277,8 @@ struct ProductInfo {
     }
 }
 
-func httpGet(from url: URL) throws -> Data {
-    let group = DispatchGroup()
-    group.enter()
-    var getError: Error?
-    var getData: Data?
-    URLSession.shared.dataTask(with: url) { data, response, error in
-        defer { group.leave() }
-        if let error = error {
-            getError = error
-            return
-        }
-        guard let data = data else {
-            getError = "No data returned from \(url)"
-            return
-        }
-        getData = data
-    }.resume()
-    group.wait()
-    if let getError = getError {
-        throw getError
-    }
-    return getData!
-}
-
-func downloadAndUnzipSQLite(from url: URL, to filename: String, expectedSize: Int?, expectedSha3Sum: String?) throws {
-    let productData = try httpGet(from: url)
+func downloadAndUnzipSQLite(from url: URL, to filename: String, expectedSize: Int?, expectedSha3Sum: String?) async throws {
+    let (productData, _) = try await URLSession.shared.data(from: url)
     if let expectedSize = expectedSize {
         guard productData.count == expectedSize else {
             throw "Downloaded SQLite archive size \(productData.count) does not match expected \(expectedSize)"
@@ -313,7 +289,7 @@ func downloadAndUnzipSQLite(from url: URL, to filename: String, expectedSize: In
     let directory = file.deletingPathExtension()
     try productData.write(to: file)
     if let expectedSha3Sum = expectedSha3Sum {
-        let sha3Output = try subprocess(sha3sum, ["-z", "-a", "256", file.path], captureStdout: true)
+        let sha3Output = try await subprocess(sha3sum, ["-z", "-a", "256", file.path], captureStdout: true)
         guard let sha3AndFile = sha3Output?.split(separator: " "),
               sha3AndFile.count == 2 else {
             throw "Unknown sha3 sum: \(String(describing: sha3Output))"
@@ -327,18 +303,14 @@ func downloadAndUnzipSQLite(from url: URL, to filename: String, expectedSize: In
         try? FileManager.default.removeItem(at: directory)
     }
 
-    try subprocess(unzip, [file.path], captureStdout: false)
+    try await subprocess(unzip, [file.path], captureStdout: false)
 
     _ = try FileManager.default.replaceItemAt(sqlite3Source, withItemAt: directory.appendingPathComponent("sqlite3.c"))
     _ = try FileManager.default.replaceItemAt(sqlite3Header, withItemAt: directory.appendingPathComponent("sqlite3.h"))
 }
 
 @discardableResult
-func subprocess(_ executable: URL, _ arguments: [String], captureStdout: Bool) throws -> String? {
-    guard FileManager.default.fileExists(atPath: executable.path) else {
-        throw "This script requires \(executable.path), please install it and try again"
-    }
-
+func subprocess(_ executable: URL, _ arguments: [String], captureStdout: Bool) async throws -> String? {
     let stdout = Pipe()
     let process = Process()
     process.executableURL = executable
@@ -352,18 +324,19 @@ func subprocess(_ executable: URL, _ arguments: [String], captureStdout: Bool) t
         throw "\(executable.path) failed: \(process.terminationStatus)"
     }
     if captureStdout {
-        return String(
-            data: stdout.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var output = ""
+        for try await line in stdout.fileHandleForReading.bytes.characters {
+            output += String(line)
+        }
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
     } else {
         return nil
     }
 }
 
-func ensureExecutable(_ executable: String) throws -> URL {
-    let bash = URL(fileURLWithPath: "/bin/bash")
-    guard let executablePath = try? subprocess(bash, ["-c", "which \(executable)"], captureStdout: true) else {
+func ensureExecutable(_ executable: String) async throws -> URL {
+    let env = URL(fileURLWithPath: "/usr/bin/env")
+    guard let executablePath = try? await subprocess(env, ["which", executable], captureStdout: true) else {
         throw "This script requires \(executable), verify your $PATH or install the executable and try again"
     }
     return URL(fileURLWithPath: executablePath)
