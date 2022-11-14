@@ -9,6 +9,11 @@ let package = Package(
     ],
     products: [
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
+        // This target is only used to add our vendor prefix and is added and removed automatically.
+        // See: scripts/vendor-sqlite3.swift
+        /* VENDOR_START
+        .library(name: "CSQLite", type: .static, targets: ["CSQLite"]),
+        VENDOR_END */
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.42.0"),
