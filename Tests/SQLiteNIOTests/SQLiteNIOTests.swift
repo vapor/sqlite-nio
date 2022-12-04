@@ -9,6 +9,8 @@ final class SQLiteNIOTests: XCTestCase {
 
         let rows = try conn.query("SELECT sqlite_version()").wait()
         print(rows)
+        let compileOptions = try conn.query("PRAGMA compile_options;").wait()
+        print(compileOptions)
     }
 
     func testZeroLengthBlob() throws {

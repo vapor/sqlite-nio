@@ -13,13 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:5.7-jammy
     steps:
-      # N.B.: When we switch to embedded SQLite, these first two steps should be removed,
-      # and the version saved to the environment should come from the checked-out package.
-      - name: Install libsqlite3 dependency
-        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
       - name: Save SQLite version to env
         run: |
-          echo SQLITE_VERSION="$(pkg-config --modversion sqlite3)" >> $GITHUB_ENV
+          echo SQLITE_VERSION="$(cat Sources/CSQLite/version.txt | grep -v '//')" >> $GITHUB_ENV
       - name: Check out package
         uses: actions/checkout@v3
       - name: Run local tests with coverage
@@ -39,8 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:5.7-jammy
     steps:
-      - name: Install libsqlite3 dependency
-        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
       - name: Check out package
         uses: actions/checkout@v3
         with:
@@ -57,8 +51,6 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:5.7-jammy
     steps:
-      - name: Install libsqlite3 dependency
-        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
       - name: Check out package
         uses: actions/checkout@v3
         with:
@@ -96,8 +88,6 @@ jobs:
     container: ${{ matrix.runner }}
     runs-on: ubuntu-latest
     steps:
-      - name: Install libsqlite3 dependency
-        run: apt-get -q update && apt-get -q install -y libsqlite3-dev
       - name: Check out code
         uses: actions/checkout@v3
       - name: Run tests with Thread Sanitizer
