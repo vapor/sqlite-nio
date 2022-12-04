@@ -102,7 +102,7 @@ public final class SQLiteConnection: SQLiteDatabase {
         threadPool.submit { state in
             var handle: OpaquePointer?
             let options = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
-            if sqlite3_open_v2(path, &handle, options, nil) == SQLITE_OK, sqlite3_busy_handler(handle, { _, _ in 1 }, nil) == SQLITE_OK {
+            if sqlite_nio_sqlite3_open_v2(path, &handle, options, nil) == SQLITE_OK, sqlite_nio_sqlite3_busy_handler(handle, { _, _ in 1 }, nil) == SQLITE_OK {
                 let connection = SQLiteConnection(
                     handle: handle,
                     threadPool: threadPool,
@@ -132,24 +132,24 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
     
     public static func libraryVersion() -> Int32 {
-        sqlite3_libversion_number()
+        sqlite_nio_sqlite3_libversion_number()
     }
     
     public static func libraryVersionString() -> String {
-        String(cString: sqlite3_libversion())
+        String(cString: sqlite_nio_sqlite3_libversion())
     }
 
     public func lastAutoincrementID() -> EventLoopFuture<Int> {
         let promise = self.eventLoop.makePromise(of: Int.self)
         self.threadPool.submit { _ in
-            let rowid = sqlite3_last_insert_rowid(self.handle)
+            let rowid = sqlite_nio_sqlite3_last_insert_rowid(self.handle)
             promise.succeed(numericCast(rowid))
         }
         return promise.futureResult
     }
 
     internal var errorMessage: String? {
-        if let raw = sqlite3_errmsg(self.handle) {
+        if let raw = sqlite_nio_sqlite3_errmsg(self.handle) {
             return String(cString: raw)
         } else {
             return nil
@@ -192,7 +192,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     public func close() -> EventLoopFuture<Void> {
         let promise = self.eventLoop.makePromise(of: Void.self)
         self.threadPool.submit { state in
-            sqlite3_close(self.handle)
+            sqlite_nio_sqlite3_close(self.handle)
             self.eventLoop.submit {
                 self.handle = nil
             }.cascade(to: promise)
