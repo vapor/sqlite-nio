@@ -34,7 +34,7 @@ extension SQLiteDatabase {
             rows.append(row)
         }.map { rows }
     }
-}
+  }
 
 extension SQLiteDatabase {
     public func logging(to logger: Logger) -> SQLiteDatabase {
@@ -138,14 +138,12 @@ public final class SQLiteConnection: SQLiteDatabase {
     public static func libraryVersionString() -> String {
         String(cString: sqlite_nio_sqlite3_libversion())
     }
-
+    
     public func lastAutoincrementID() -> EventLoopFuture<Int> {
-        let promise = self.eventLoop.makePromise(of: Int.self)
-        self.threadPool.submit { _ in
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             let rowid = sqlite_nio_sqlite3_last_insert_rowid(self.handle)
-            promise.succeed(numericCast(rowid))
+            return numericCast(rowid)
         }
-        return promise.futureResult
     }
 
     internal var errorMessage: String? {
@@ -190,42 +188,25 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
 
     public func close() -> EventLoopFuture<Void> {
-        let promise = self.eventLoop.makePromise(of: Void.self)
-        self.threadPool.submit { state in
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) { 
             sqlite_nio_sqlite3_close(self.handle)
-            self.eventLoop.submit {
-                self.handle = nil
-            }.cascade(to: promise)
+        }.flatMap { _ in
+            self.handle = nil
         }
-        return promise.futureResult
     }
 
 	public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
 		logger.trace("Adding custom function \(customFunction.name)")
-		let promise = self.eventLoop.makePromise(of: Void.self)
-		self.threadPool.submit { state in
-			do {
-				try customFunction.install(in: self)
-				promise.succeed(())
-			} catch {
-				promise.fail(error)
-			}
+		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            try customFunction.install(in: self)
 		}
-		return promise.futureResult
 	}
 
 	public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
 		logger.trace("Removing custom function \(customFunction.name)")
-		let promise = self.eventLoop.makePromise(of: Void.self)
-		self.threadPool.submit { state in
-			do {
-				try customFunction.uninstall(in: self)
-				promise.succeed(())
-			} catch {
-				promise.fail(error)
-			}
+		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            try customFunction.uninstall(in: self)
 		}
-		return promise.futureResult
 	}
 
     deinit {
