@@ -29,6 +29,11 @@ public final class SQLiteCustomFunction: Hashable {
 	private let kind: Kind
 	private var eTextRep: Int32 { (SQLITE_UTF8 | (pure ? SQLITE_DETERMINISTIC : 0)) }
 
+  public struct SQLiteCustomFunctionArgumentError: Error {
+    public let count: Int
+    public let index: Int
+  }
+  
 	public init(
 		_ name: String,
 		argumentCount: Int32? = nil,
@@ -38,9 +43,14 @@ public final class SQLiteCustomFunction: Hashable {
 		self.identity = Identity(name: name, nArg: argumentCount ?? -1)
 		self.pure = pure
 		self.kind = .function { (argc, argv) in
-			let arguments = (0..<Int(argc)).map { index -> SQLiteData in
-				return SQLiteData(sqliteValue: argv.unsafelyUnwrapped[index]!)
-			}
+      let count = Int(argc)
+			let arguments = try (0 ..< count)
+        .map { index -> SQLiteData in
+          guard let value = argv?[index] else {
+            throw SQLiteCustomFunctionArgumentError(count: count, index: index)
+          }
+          return SQLiteData(sqliteValue: value)
+        }
 			return try function(arguments)
 		}
 	}
@@ -214,10 +224,15 @@ public final class SQLiteCustomFunction: Hashable {
 				let aggregateContext = aggregateContextU.takeUnretainedValue()
 				assert(!aggregateContext.hasErrored) // assert SQLite behavior
 				do {
-					let arguments = (0..<Int(argc)).map { index in
-						SQLiteData(sqliteValue: argv.unsafelyUnwrapped[index]!)
-					}
-					try aggregateContext.aggregate.step(arguments)
+          let count = Int(argc)
+					let arguments = try (0 ..< count)
+            .map { index in
+              guard let value = argv?[index] else {
+                throw SQLiteCustomFunctionArgumentError(count: count, index: index)
+              }
+              return SQLiteData(sqliteValue: value)
+            }
+          try aggregateContext.aggregate.step(arguments)
 				} catch {
 					aggregateContext.hasErrored = true
 					SQLiteCustomFunction.report(error: error, in: sqliteContext)
