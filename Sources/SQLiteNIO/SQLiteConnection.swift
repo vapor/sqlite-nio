@@ -190,7 +190,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     public func close() -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) { 
             sqlite_nio_sqlite3_close(self.handle)
-        }.flatMap { _ in
+        }.map { _ in
             self.handle = nil
         }
     }
