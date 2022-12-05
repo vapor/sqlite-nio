@@ -99,9 +99,11 @@ public final class SQLiteConnection: SQLiteDatabase {
         }
 
         let promise = eventLoop.makePromise(of: SQLiteConnection.self)
-        threadPool.submit { state in
+
+        return threadPool.runIfActive(eventLoop: eventLoop) {
             var handle: OpaquePointer?
             let options = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
+
             if sqlite_nio_sqlite3_open_v2(path, &handle, options, nil) == SQLITE_OK, sqlite_nio_sqlite3_busy_handler(handle, { _, _ in 1 }, nil) == SQLITE_OK {
                 let connection = SQLiteConnection(
                     handle: handle,
@@ -110,13 +112,14 @@ public final class SQLiteConnection: SQLiteDatabase {
                     on: eventLoop
                 )
                 logger.debug("Connected to sqlite db: \(path)")
-                promise.succeed(connection)
+                return promise.succeed(connection)
             } else {
                 logger.error("Failed to connect to sqlite db: \(path)")
-                promise.fail(SQLiteError(reason: .cantOpen, message: "Cannot open SQLite database: \(storage)"))
+                return promise.fail(SQLiteError(reason: .cantOpen, message: "Cannot open SQLite database: \(storage)"))
             }
+        }.flatMap {
+            promise.futureResult
         }
-        return promise.futureResult
     }
 
     init(
@@ -166,7 +169,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     ) -> EventLoopFuture<Void> {
         logger.debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
-        self.threadPool.submit { state in
+        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             do {
                 let statement = try SQLiteStatement(query: query, on: self)
                 try statement.bind(binds)
@@ -183,8 +186,9 @@ public final class SQLiteConnection: SQLiteDatabase {
             } catch {
                 promise.fail(error)
             }
+        }.flatMap {
+            promise.futureResult
         }
-        return promise.futureResult
     }
 
     public func close() -> EventLoopFuture<Void> {
