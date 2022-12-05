@@ -116,8 +116,7 @@ final class SQLiteNIOTests: XCTestCase {
 		defer { try! conn.close().wait() }
 
 		let function = SQLiteCustomFunction("my_custom_function", argumentCount: 1, pure: true) { args in
-			let result = Int(args[0].integer! * 3)
-			return SQLiteData.integer(result)
+			return Int(args[0].integer! * 3)
 		}
 
 		_ = try conn.install(customFunction: function).wait()
