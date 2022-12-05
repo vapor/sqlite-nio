@@ -110,7 +110,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
 }
 
 extension SQLiteData {
-	init(sqliteValue: OpaquePointer) {
+	init(sqliteValue: OpaquePointer) throws {
 		switch sqlite3_value_type(sqliteValue) {
 		case SQLITE_NULL:
 			self = .null
@@ -134,8 +134,11 @@ extension SQLiteData {
 				self = .blob(ByteBuffer())
 			}
 		case let type:
-			// Assume a bug: there is no point throwing any error.
-			fatalError("Unexpected SQLite value type: \(type)")
+      throw SQLiteCustomFunctionUnexpectedValueTypeError(type: type)
 		}
 	}
+  
+  public struct SQLiteCustomFunctionUnexpectedValueTypeError: Error {
+    public let type: Int32
+  }
 }

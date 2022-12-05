@@ -49,7 +49,7 @@ public final class SQLiteCustomFunction: Hashable {
           guard let value = argv?[index] else {
             throw SQLiteCustomFunctionArgumentError(count: count, index: index)
           }
-          return SQLiteData(sqliteValue: value)
+          return try SQLiteData(sqliteValue: value)
         }
 			return try function(arguments)
 		}
@@ -128,7 +128,6 @@ public final class SQLiteCustomFunction: Hashable {
 			})
 
 		guard code == SQLITE_OK else {
-			// Assume a bug: there is no point throwing any error.
 			throw SQLiteError(statusCode: code, connection: connection)
 		}
 	}
@@ -143,7 +142,6 @@ public final class SQLiteCustomFunction: Hashable {
 			nil, nil, nil, nil, nil)
 
 		guard code == SQLITE_OK else {
-			// Assume a bug: there is no point throwing any error.
 			throw SQLiteError(statusCode: code, connection: connection)
 		}
 	}
@@ -230,7 +228,7 @@ public final class SQLiteCustomFunction: Hashable {
               guard let value = argv?[index] else {
                 throw SQLiteCustomFunctionArgumentError(count: count, index: index)
               }
-              return SQLiteData(sqliteValue: value)
+              return try SQLiteData(sqliteValue: value)
             }
           try aggregateContext.aggregate.step(arguments)
 				} catch {
