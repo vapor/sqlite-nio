@@ -362,9 +362,9 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	override func setUp() {
-		self.threadPool = .init(numberOfThreads: 8)
+		self.threadPool = .init(numberOfThreads: 1)
 		self.threadPool.start()
-		self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 8)
+		self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 	}
 
 	override func tearDown() {
