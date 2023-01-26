@@ -50,11 +50,11 @@ var cSQLiteSettings: [CSetting] = [
     .define("SQLITE_ENABLE_UPDATE_DELETE_LIMIT"),
     .define("SQLITE_HAVE_ISNAN"),
     .define("SQLITE_LIKE_DOESNT_MATCH_BLOBS"),
-    .define("SQLITE_MUTEX_PTHREADS"),
     .define("SQLITE_OMIT_LOAD_EXTENSION"),
     .define("SQLITE_OMIT_LOOKASIDE"),
     .define("SQLITE_SECURE_DELETE"),
     .define("SQLITE_SYSTEM_MALLOC"),
+    .define("SQLITE_THREADSAFE", to: "2"),
     .define("SQLITE_USE_URI"),
 ]
 
@@ -78,6 +78,15 @@ cSQLiteSettings.append(contentsOf: [
     .define("SQLITE_MAX_MMAP_SIZE", to: "1073741824"),
 ])
 #endif
+
+// In Xcode  on macOS (and possibly on other platforms), sqlite.3 emits several harmless warnings that
+// we suppress to avoid cluttering the build.
+cSQLiteSettings.append(
+    .unsafeFlags([
+        "-Wno-shorten-64-to-32",
+        "-Wno-ambiguous-macro",
+    ])
+)
 
 package.targets.append(
     .target(
