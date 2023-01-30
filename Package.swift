@@ -79,15 +79,6 @@ cSQLiteSettings.append(contentsOf: [
 ])
 #endif
 
-// In Xcode  on macOS (and possibly on other platforms), sqlite.3 emits several harmless warnings that
-// we suppress to avoid cluttering the build.
-cSQLiteSettings.append(
-    .unsafeFlags([
-        "-Wno-shorten-64-to-32",
-        "-Wno-ambiguous-macro",
-    ])
-)
-
 package.targets.append(
     .target(
         name: "CSQLite",
