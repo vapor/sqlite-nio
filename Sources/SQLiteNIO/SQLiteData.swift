@@ -1,5 +1,5 @@
 import CSQLite
-import NIO
+import NIOCore
 
 /// Supported SQLite data types.
 public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
