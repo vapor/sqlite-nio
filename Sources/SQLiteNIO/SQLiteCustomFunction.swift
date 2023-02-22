@@ -113,7 +113,7 @@ public final class SQLiteCustomFunction: Hashable {
 		let definition = kind.definition
 		let definitionP = Unmanaged.passRetained(definition).toOpaque()
 
-		let code = sqlite3_create_function_v2(
+		let code = sqlite_nio_sqlite3_create_function_v2(
 			connection.handle,
 			identity.name,
 			identity.nArg,
@@ -134,7 +134,7 @@ public final class SQLiteCustomFunction: Hashable {
 	/// Calls sqlite3_create_function_v2
 	/// See https://sqlite.org/c3ref/create_function.html
 	func uninstall(in connection: SQLiteConnection) throws {
-		let code = sqlite3_create_function_v2(
+		let code = sqlite_nio_sqlite3_create_function_v2(
 			connection.handle,
 			identity.name,
 			identity.nArg,
@@ -201,7 +201,7 @@ public final class SQLiteCustomFunction: Hashable {
 			guard case .function = self else { return nil }
 			return { (sqliteContext, argc, argv) in
 				let definition = Unmanaged<FunctionDefinition>
-					.fromOpaque(sqlite3_user_data(sqliteContext))
+					.fromOpaque(sqlite_nio_sqlite3_user_data(sqliteContext))
 					.takeUnretainedValue()
 				do {
 					try SQLiteCustomFunction.report(
@@ -277,7 +277,7 @@ public final class SQLiteCustomFunction: Hashable {
 		// > the same aggregate function instance, the same buffer is returned.
 		let stride = MemoryLayout<Unmanaged<AggregateContext>>.stride
 		let aggregateContextBufferP = UnsafeMutableRawBufferPointer(
-			start: sqlite3_aggregate_context(sqliteContext, Int32(stride))!,
+			start: sqlite_nio_sqlite3_aggregate_context(sqliteContext, Int32(stride))!,
 			count: stride)
 
 		if aggregateContextBufferP.contains(where: { $0 != 0 }) {
@@ -288,7 +288,7 @@ public final class SQLiteCustomFunction: Hashable {
 			return aggregateContextP.pointee
 		} else {
 			// Buffer contains null pointer: create aggregate context.
-			let aggregate = Unmanaged<AggregateDefinition>.fromOpaque(sqlite3_user_data(sqliteContext))
+			let aggregate = Unmanaged<AggregateDefinition>.fromOpaque(sqlite_nio_sqlite3_user_data(sqliteContext))
 				.takeUnretainedValue()
 				.makeAggregate()
 			let aggregateContext = AggregateContext(aggregate: aggregate)
@@ -306,26 +306,26 @@ public final class SQLiteCustomFunction: Hashable {
 	private static func report(result: SQLiteDataConvertible?, in sqliteContext: OpaquePointer?) {
 		switch result?.sqliteData ?? .null {
 		case .null:
-			sqlite3_result_null(sqliteContext)
+			sqlite_nio_sqlite3_result_null(sqliteContext)
 		case .integer(let int64):
-			sqlite3_result_int64(sqliteContext, Int64(int64))
+			sqlite_nio_sqlite3_result_int64(sqliteContext, Int64(int64))
 		case .float(let double):
-			sqlite3_result_double(sqliteContext, double)
+			sqlite_nio_sqlite3_result_double(sqliteContext, double)
 		case .text(let string):
-			sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
+			sqlite_nio_sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
 		case .blob(let value):
 			value.withUnsafeReadableBytes { pointer in
-				sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.readableBytes), SQLITE_TRANSIENT)
+				sqlite_nio_sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.readableBytes), SQLITE_TRANSIENT)
 			}
 		}
 	}
 
 	private static func report(error: Error, in sqliteContext: OpaquePointer?) {
 		if let error = error as? SQLiteError {
-			sqlite3_result_error(sqliteContext, error.message, -1)
-			sqlite3_result_error_code(sqliteContext, error.reason.statusCode)
+			sqlite_nio_sqlite3_result_error(sqliteContext, error.message, -1)
+			sqlite_nio_sqlite3_result_error_code(sqliteContext, error.reason.statusCode)
 		} else {
-			sqlite3_result_error(sqliteContext, "\(error)", -1)
+			sqlite_nio_sqlite3_result_error(sqliteContext, "\(error)", -1)
 		}
 	}
 }

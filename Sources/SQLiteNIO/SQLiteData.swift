@@ -111,18 +111,18 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
 
 extension SQLiteData {
 	init(sqliteValue: OpaquePointer) throws {
-		switch sqlite3_value_type(sqliteValue) {
+		switch sqlite_nio_sqlite3_value_type(sqliteValue) {
 		case SQLITE_NULL:
 			self = .null
 		case SQLITE_INTEGER:
-			self = .integer(Int(sqlite3_value_int64(sqliteValue)))
+			self = .integer(Int(sqlite_nio_sqlite3_value_int64(sqliteValue)))
 		case SQLITE_FLOAT:
-			self = .float(sqlite3_value_double(sqliteValue))
+			self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
 		case SQLITE_TEXT:
-			self = .text(String(cString: sqlite3_value_text(sqliteValue)!))
+			self = .text(String(cString: sqlite_nio_sqlite3_value_text(sqliteValue)!))
 		case SQLITE_BLOB:
-			if let bytes = sqlite3_value_blob(sqliteValue) {
-				let count = Int(sqlite3_value_bytes(sqliteValue))
+			if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
+				let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
 				var buffer = ByteBufferAllocator().buffer(capacity: count)
 				buffer.writeBytes(UnsafeBufferPointer(
 					start: bytes.assumingMemoryBound(to: UInt8.self),
