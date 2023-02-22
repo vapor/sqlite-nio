@@ -29,10 +29,10 @@ public final class SQLiteCustomFunction: Hashable {
 	private let kind: Kind
 	private var eTextRep: Int32 { (SQLITE_UTF8 | (pure ? SQLITE_DETERMINISTIC : 0)) }
 
-  public struct SQLiteCustomFunctionArgumentError: Error {
-    public let count: Int
-    public let index: Int
-  }
+    public struct SQLiteCustomFunctionArgumentError: Error {
+        public let count: Int
+        public let index: Int
+    }
   
 	public init(
 		_ name: String,
@@ -43,14 +43,13 @@ public final class SQLiteCustomFunction: Hashable {
 		self.identity = Identity(name: name, nArg: argumentCount ?? -1)
 		self.pure = pure
 		self.kind = .function { (argc, argv) in
-      let count = Int(argc)
-			let arguments = try (0 ..< count)
-        .map { index -> SQLiteData in
-          guard let value = argv?[index] else {
-            throw SQLiteCustomFunctionArgumentError(count: count, index: index)
-          }
-          return try SQLiteData(sqliteValue: value)
-        }
+            let count = Int(argc)
+			let arguments = try (0 ..< count).map { index -> SQLiteData in
+                guard let value = argv?[index] else {
+                    throw SQLiteCustomFunctionArgumentError(count: count, index: index)
+                }
+                return try SQLiteData(sqliteValue: value)
+            }
 			return try function(arguments)
 		}
 	}
@@ -99,8 +98,8 @@ public final class SQLiteCustomFunction: Hashable {
 		_ name: String,
 		argumentCount: Int32? = nil,
 		pure: Bool = false,
-		aggregate: Aggregate.Type)
-	{
+		aggregate: Aggregate.Type
+    ) {
 		self.identity = Identity(name: name, nArg: argumentCount ?? -1)
 		self.pure = pure
 		self.kind = .aggregate { Aggregate() }
@@ -222,15 +221,14 @@ public final class SQLiteCustomFunction: Hashable {
 				let aggregateContext = aggregateContextU.takeUnretainedValue()
 				assert(!aggregateContext.hasErrored) // assert SQLite behavior
 				do {
-          let count = Int(argc)
-					let arguments = try (0 ..< count)
-            .map { index in
-              guard let value = argv?[index] else {
-                throw SQLiteCustomFunctionArgumentError(count: count, index: index)
-              }
-              return try SQLiteData(sqliteValue: value)
-            }
-          try aggregateContext.aggregate.step(arguments)
+                    let count = Int(argc)
+					let arguments = try (0 ..< count).map { index in
+                        guard let value = argv?[index] else {
+                            throw SQLiteCustomFunctionArgumentError(count: count, index: index)
+                        }
+                        return try SQLiteData(sqliteValue: value)
+                    }
+                    try aggregateContext.aggregate.step(arguments)
 				} catch {
 					aggregateContext.hasErrored = true
 					SQLiteCustomFunction.report(error: error, in: sqliteContext)

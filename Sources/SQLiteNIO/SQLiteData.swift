@@ -134,11 +134,11 @@ extension SQLiteData {
 				self = .blob(ByteBuffer())
 			}
 		case let type:
-      throw SQLiteCustomFunctionUnexpectedValueTypeError(type: type)
+            throw SQLiteCustomFunctionUnexpectedValueTypeError(type: type)
 		}
 	}
   
-  public struct SQLiteCustomFunctionUnexpectedValueTypeError: Error {
-    public let type: Int32
-  }
+    public struct SQLiteCustomFunctionUnexpectedValueTypeError: Error {
+        public let type: Int32
+    }
 }

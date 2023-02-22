@@ -31,8 +31,6 @@ private struct CustomValueType: SQLiteDataConvertible, Equatable {
 
 class DatabaseFunctionTests: XCTestCase {
 
-
-
 	// MARK: - Return values
 
 	func testFunctionReturningNull() throws {
@@ -358,7 +356,7 @@ class DatabaseFunctionTests: XCTestCase {
 	var threadPool: NIOThreadPool!
 	var eventLoopGroup: EventLoopGroup!
 	var eventLoop: EventLoop {
-		return self.eventLoopGroup.next()
+		return self.eventLoopGroup.any()
 	}
 
 	override func setUp() {
