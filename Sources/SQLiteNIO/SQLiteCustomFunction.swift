@@ -273,31 +273,23 @@ public final class SQLiteCustomFunction: Hashable {
 		// > zeroes out that memory, and returns a pointer to the new memory.
 		// > On second and subsequent calls to sqlite3_aggregate_context() for
 		// > the same aggregate function instance, the same buffer is returned.
-		let stride = MemoryLayout<Unmanaged<AggregateContext>>.stride
+		let stride = MemoryLayout<OpaquePointer?>.stride
 		let aggregateContextBufferP = UnsafeMutableRawBufferPointer(
 			start: sqlite_nio_sqlite3_aggregate_context(sqliteContext, Int32(stride))!,
 			count: stride)
-
-		if aggregateContextBufferP.contains(where: { $0 != 0 }) {
-			// Buffer contains non-zero byte: load aggregate context
-			let aggregateContextP = aggregateContextBufferP
-				.baseAddress!
-				.assumingMemoryBound(to: Unmanaged<AggregateContext>.self)
-			return aggregateContextP.pointee
-		} else {
-			// Buffer contains null pointer: create aggregate context.
-			let aggregate = Unmanaged<AggregateDefinition>.fromOpaque(sqlite_nio_sqlite3_user_data(sqliteContext))
-				.takeUnretainedValue()
-				.makeAggregate()
-			let aggregateContext = AggregateContext(aggregate: aggregate)
-
-			// retain and store in SQLite's buffer
-			let aggregateContextU = Unmanaged.passRetained(aggregateContext)
-			let aggregateContextP = aggregateContextU.toOpaque()
-			withUnsafeBytes(of: aggregateContextP) {
-				aggregateContextBufferP.copyMemory(from: $0)
-			}
-			return aggregateContextU
+        
+        return aggregateContextBufferP.withMemoryRebound(to: OpaquePointer?.self) { aggregateContextBufferP in
+            if let contextPtr = aggregateContextBufferP[0] {
+                // Buffer contains non-null pointer; return existing context.
+                return Unmanaged<AggregateContext>.fromOpaque(.init(contextPtr))
+            } else {
+                // Buffer contains null pointer; create new context.
+                let definition = Unmanaged<AggregateDefinition>.fromOpaque(sqlite_nio_sqlite3_user_data(sqliteContext)).takeUnretainedValue()
+                let context = Unmanaged.passRetained(AggregateContext(aggregate: definition.makeAggregate()))
+                
+                aggregateContextBufferP[0] = .some(.init(context.toOpaque()))
+                return context
+            }
 		}
 	}
 
