@@ -320,6 +320,29 @@ public final class SQLiteCustomFunction: Hashable {
     }
 }
 
+#if swift(<5.7)
+extension UnsafeMutableRawBufferPointer {
+    /// Horribly hacked-up shim of this method from SE-0333 for the 5.5/5.6 stdlib.
+    ///
+    /// This is not an especially high-quality implementation, but it doesn't seem to give ASan,
+    /// TSan, or UBSan any headaches.
+    ///
+    /// Besides, 	with 5.7 already recommended for all users, it'd feel rather silly to invest lots of
+    /// time in making this one method pass a rigorous mathematical proof.
+    public func withMemoryRebound<T, Result>(
+        to type: T.Type,
+        _ body: (_ buffer: UnsafeMutableBufferPointer<T>) throws -> Result
+    ) rethrows -> Result {
+        assert(Int(bitPattern: self.baseAddress) & (MemoryLayout<T>.alignment - 1) == 0)
+        
+        return try UnsafeMutableBufferPointer<T>(
+            start: .init(bitPattern: Int(bitPattern: self.baseAddress)),
+            count: self.count / MemoryLayout<T>.stride
+        ).withMemoryRebound(to: T.self, body)
+    }
+}
+#endif
+
 extension SQLiteCustomFunction {
     /// :nodoc:
     public func hash(into hasher: inout Hasher) {
