@@ -222,7 +222,7 @@ public final class SQLiteCustomFunction: Hashable {
 				assert(!aggregateContext.hasErrored) // assert SQLite behavior
 				do {
                     let count = Int(argc)
-					let arguments = try (0 ..< count).map { index in
+					let arguments = try (0 ..< count).map { index -> SQLiteData in
                         guard let value = argv?[index] else {
                             throw SQLiteCustomFunctionArgumentError(count: count, index: index)
                         }
@@ -278,7 +278,7 @@ public final class SQLiteCustomFunction: Hashable {
 			start: sqlite_nio_sqlite3_aggregate_context(sqliteContext, Int32(stride))!,
 			count: stride)
         
-        return aggregateContextBufferP.withMemoryRebound(to: OpaquePointer?.self) { aggregateContextBufferP in
+        return aggregateContextBufferP.withMemoryRebound(to: OpaquePointer?.self) { aggregateContextBufferP -> Unmanaged<AggregateContext> in
             if let contextPtr = aggregateContextBufferP[0] {
                 // Buffer contains non-null pointer; return existing context.
                 return Unmanaged<AggregateContext>.fromOpaque(.init(contextPtr))
