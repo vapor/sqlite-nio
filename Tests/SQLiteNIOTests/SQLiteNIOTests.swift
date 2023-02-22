@@ -1,6 +1,8 @@
 import XCTest
 import SQLiteNIO
 import Logging
+import NIOCore
+import NIOPosix
 
 final class SQLiteNIOTests: XCTestCase {
     func testBasicConnection() throws {
