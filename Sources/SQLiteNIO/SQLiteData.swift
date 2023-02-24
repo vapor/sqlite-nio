@@ -123,12 +123,7 @@ extension SQLiteData {
 		case SQLITE_BLOB:
 			if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
 				let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
-				var buffer = ByteBufferAllocator().buffer(capacity: count)
-				buffer.writeBytes(UnsafeBufferPointer(
-					start: bytes.assumingMemoryBound(to: UInt8.self),
-					count: count
-				))
-
+                let buffer = ByteBuffer(bytes: UnsafeRawBufferPointer(start: bytes, count: count))
 				self = .blob(buffer) // copy bytes
 			} else {
 				self = .blob(ByteBuffer())

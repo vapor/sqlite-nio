@@ -241,9 +241,7 @@ public final class SQLiteCustomFunction: Hashable {
         var xFinal: (@convention(c) (OpaquePointer?) -> Void)? {
             guard case .aggregate = self else { return nil }
             return { (sqliteContext) in
-                let aggregateContextU = SQLiteCustomFunction.unmanagedAggregateContext(sqliteContext)
-                let aggregateContext = aggregateContextU.takeUnretainedValue()
-                aggregateContextU.release()
+                let aggregateContext = SQLiteCustomFunction.unmanagedAggregateContext(sqliteContext).takeRetainedValue()
 
                 guard !aggregateContext.hasErrored else {
                     return
