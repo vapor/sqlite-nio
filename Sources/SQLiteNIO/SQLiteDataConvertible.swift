@@ -123,6 +123,12 @@ extension Date: SQLiteDataConvertible {
             value = v
         case .integer(let v):
             value = Double(v)
+        case .text(let v):
+            guard let d = dateTimeFormatter.date(from: v) ?? dateFormatter.date(from: v) else {
+                return nil
+            }
+            self = d
+            return
         default:
             return nil
         }
@@ -136,3 +142,26 @@ extension Date: SQLiteDataConvertible {
         return .float(timeIntervalSince1970)
     }
 }
+
+/// Matches dates from the `datetime()` function
+let dateTimeFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [
+        .withFullDate,
+        .withDashSeparatorInDate,
+        .withSpaceBetweenDateAndTime,
+        .withTime,
+        .withColonSeparatorInTime
+    ]
+    return formatter
+}()
+
+/// Matches dates from the `date()` function
+let dateFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [
+        .withFullDate,
+        .withDashSeparatorInDate
+    ]
+    return formatter
+}()
