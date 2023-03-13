@@ -104,8 +104,47 @@ final class SQLiteNIOTests: XCTestCase {
         }
         XCTAssertEqual(i, 3)
         XCTAssertEqual(rows[0].column("foo")?.integer, 1)
+        XCTAssertEqual(rows[0].columns.filter { $0.name == "foo" }[0].data.integer, 1)
         XCTAssertEqual(rows[0].columns.filter { $0.name == "foo" }[1].data.integer, 2)
     }
+
+	func testCustomAggregate() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+
+		_ = try conn.query(#"CREATE TABLE "scores" ("score" INTEGER NOT NULL);"#).wait()
+		_ = try conn.query(#"INSERT INTO scores (score) VALUES (?), (?), (?);"#, [.integer(3), .integer(4), .integer(5)]).wait()
+
+		struct MyAggregate: SQLiteCustomAggregate {
+			var sum: Int = 0
+			mutating func step(_ values: [SQLiteData]) throws {
+				sum = sum + (values.first?.integer ?? 0)
+			}
+
+			func finalize() throws -> SQLiteDataConvertible? {
+				sum
+			}
+		}
+
+		let function = SQLiteCustomFunction("my_sum", argumentCount: 1, pure: true, aggregate: MyAggregate.self)
+		_ = try conn.install(customFunction: function).wait()
+
+		let rows = try conn.query("SELECT my_sum(score) as total_score FROM scores").wait()
+		XCTAssertEqual(rows.first?.column("total_score")?.integer, 12)
+	}
+
+	func testDatabaseFunction() throws {
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		defer { try! conn.close().wait() }
+
+		let function = SQLiteCustomFunction("my_custom_function", argumentCount: 1, pure: true) { args in
+			return Int(args[0].integer! * 3)
+		}
+
+		_ = try conn.install(customFunction: function).wait()
+		let rows = try conn.query("SELECT my_custom_function(2) as my_value").wait()
+		XCTAssertEqual(rows.first?.column("my_value")?.integer, 6)
+	}
 
     var threadPool: NIOThreadPool!
     var eventLoopGroup: EventLoopGroup!

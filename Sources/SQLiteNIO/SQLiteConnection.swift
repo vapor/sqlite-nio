@@ -34,7 +34,7 @@ extension SQLiteDatabase {
             rows.append(row)
         }.map { rows }
     }
-}
+  }
 
 extension SQLiteDatabase {
     public func logging(to logger: Logger) -> SQLiteDatabase {
@@ -99,9 +99,11 @@ public final class SQLiteConnection: SQLiteDatabase {
         }
 
         let promise = eventLoop.makePromise(of: SQLiteConnection.self)
-        threadPool.submit { state in
+
+        return threadPool.runIfActive(eventLoop: eventLoop) {
             var handle: OpaquePointer?
             let options = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
+
             if sqlite_nio_sqlite3_open_v2(path, &handle, options, nil) == SQLITE_OK, sqlite_nio_sqlite3_busy_handler(handle, { _, _ in 1 }, nil) == SQLITE_OK {
                 let connection = SQLiteConnection(
                     handle: handle,
@@ -110,13 +112,14 @@ public final class SQLiteConnection: SQLiteDatabase {
                     on: eventLoop
                 )
                 logger.debug("Connected to sqlite db: \(path)")
-                promise.succeed(connection)
+                return promise.succeed(connection)
             } else {
                 logger.error("Failed to connect to sqlite db: \(path)")
-                promise.fail(SQLiteError(reason: .cantOpen, message: "Cannot open SQLite database: \(storage)"))
+                return promise.fail(SQLiteError(reason: .cantOpen, message: "Cannot open SQLite database: \(storage)"))
             }
+        }.flatMap {
+            promise.futureResult
         }
-        return promise.futureResult
     }
 
     init(
@@ -138,14 +141,12 @@ public final class SQLiteConnection: SQLiteDatabase {
     public static func libraryVersionString() -> String {
         String(cString: sqlite_nio_sqlite3_libversion())
     }
-
+    
     public func lastAutoincrementID() -> EventLoopFuture<Int> {
-        let promise = self.eventLoop.makePromise(of: Int.self)
-        self.threadPool.submit { _ in
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             let rowid = sqlite_nio_sqlite3_last_insert_rowid(self.handle)
-            promise.succeed(numericCast(rowid))
+            return numericCast(rowid)
         }
-        return promise.futureResult
     }
 
     internal var errorMessage: String? {
@@ -168,7 +169,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     ) -> EventLoopFuture<Void> {
         logger.debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
-        self.threadPool.submit { state in
+        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             do {
                 let statement = try SQLiteStatement(query: query, on: self)
                 try statement.bind(binds)
@@ -185,20 +186,32 @@ public final class SQLiteConnection: SQLiteDatabase {
             } catch {
                 promise.fail(error)
             }
+        }.flatMap {
+            promise.futureResult
         }
-        return promise.futureResult
     }
 
     public func close() -> EventLoopFuture<Void> {
-        let promise = self.eventLoop.makePromise(of: Void.self)
-        self.threadPool.submit { state in
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) { 
             sqlite_nio_sqlite3_close(self.handle)
-            self.eventLoop.submit {
-                self.handle = nil
-            }.cascade(to: promise)
+        }.map { _ in
+            self.handle = nil
         }
-        return promise.futureResult
     }
+
+	public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+		logger.trace("Adding custom function \(customFunction.name)")
+		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            try customFunction.install(in: self)
+		}
+	}
+
+	public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+		logger.trace("Removing custom function \(customFunction.name)")
+		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            try customFunction.uninstall(in: self)
+		}
+	}
 
     deinit {
         assert(self.handle == nil, "SQLiteConnection was not closed before deinitializing")
