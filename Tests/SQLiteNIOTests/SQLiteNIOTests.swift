@@ -23,6 +23,26 @@ final class SQLiteNIOTests: XCTestCase {
         print(rows)
     }
 
+    func testDateFormat() throws {
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        defer { try! conn.close().wait() }
+        
+        XCTAssertEqual(Date(sqliteData: .text("2023-03-10"))?.timeIntervalSince1970, 1678406400)
+        
+        let rows = try conn.query("SELECT CURRENT_DATE").wait()
+        XCTAssertNotNil(Date(sqliteData: rows[0].column("CURRENT_DATE")!))
+    }
+    
+    func testDateTimeFormat() throws {
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        defer { try! conn.close().wait() }
+        
+        XCTAssertEqual(Date(sqliteData: .text("2023-03-10 23:54:27"))?.timeIntervalSince1970, 1678492467)
+        
+        let rows = try conn.query("SELECT CURRENT_TIMESTAMP").wait()
+        XCTAssertNotNil(Date(sqliteData: rows[0].column("CURRENT_TIMESTAMP")!))
+    }
+    
     func testTimestampStorage() throws {
         let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
