@@ -14,6 +14,13 @@ final class SQLiteNIOTests: XCTestCase {
         let compileOptions = try conn.query("PRAGMA compile_options;").wait()
         print(compileOptions)
     }
+    
+    func testConnectionClosedThreadPool() throws {
+        let threadPool = NIOThreadPool(numberOfThreads: 1)
+        try threadPool.syncShutdownGracefully()
+        // This should error, but not create a leaking promise fatal error
+        XCTAssertThrowsError(try SQLiteConnection.open(storage: .memory, threadPool: threadPool, on: self.eventLoop).wait())
+    }
 
     func testZeroLengthBlob() throws {
         let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
