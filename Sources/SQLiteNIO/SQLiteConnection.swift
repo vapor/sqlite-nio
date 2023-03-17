@@ -98,8 +98,6 @@ public final class SQLiteConnection: SQLiteDatabase {
             path = file
         }
 
-        let promise = eventLoop.makePromise(of: SQLiteConnection.self)
-
         return threadPool.runIfActive(eventLoop: eventLoop) {
             var handle: OpaquePointer?
             let options = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
@@ -112,13 +110,11 @@ public final class SQLiteConnection: SQLiteDatabase {
                     on: eventLoop
                 )
                 logger.debug("Connected to sqlite db: \(path)")
-                return promise.succeed(connection)
+                return connection
             } else {
                 logger.error("Failed to connect to sqlite db: \(path)")
-                return promise.fail(SQLiteError(reason: .cantOpen, message: "Cannot open SQLite database: \(storage)"))
+                throw SQLiteError(reason: .cantOpen, message: "Cannot open SQLite database: \(storage)")
             }
-        }.flatMap {
-            promise.futureResult
         }
     }
 
