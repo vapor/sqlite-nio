@@ -57,6 +57,7 @@ let sha3sum: URL!
 let swift: URL!
 let ar: URL!
 let nm: URL!
+let patch: URL!
 do {
     unzip = try await ensureExecutable("unzip")
     sqlite3 = try await ensureExecutable("sqlite3")
@@ -64,6 +65,7 @@ do {
     swift = try await ensureExecutable("swift")
     ar = try await ensureExecutable("ar")
     nm = try await ensureExecutable("nm")
+    patch = try await ensureExecutable("patch")
 
     try await main()
 } catch let error as String {
@@ -130,6 +132,7 @@ func bumpVersion(_ args: ArraySlice<String>) async throws {
         expectedSize: product.sizeInBytes,
         expectedSha3Sum: product.sha3Hash
     )
+    try await applySQLitePatches()
     try await addVendorPrefixToSQLite()
     try product.version.stamp(from: product.downloadURL)
     print("Upgraded from \(String(describing: currentVersion)) to \(product.version)")
@@ -185,6 +188,7 @@ func updateVersion(_ args: ArraySlice<String>) async throws {
     let filename = "sqlite-amalgamation-\(version.asDownloadVersion).zip"
     let sqliteDownloadURL = URL(string: "\(sqliteURL)/\(year)/\(filename)")!
     try await downloadAndUnzipSQLite(from: sqliteDownloadURL, to: filename, expectedSize: nil, expectedSha3Sum: nil)
+    try await applySQLitePatches()
     try await addVendorPrefixToSQLite()
     try version.stamp(from: sqliteDownloadURL)
     print("Upgraded from \(String(describing: currentVersion)) to \(version)")
@@ -438,6 +442,19 @@ func getSymbolsToPrefix() async throws -> [String] {
     }
 
     return sortedSymbolsToRewrite.filter { !exclude.contains($0) }
+}
+
+func applySQLitePatches() async throws {
+    try await subprocess(patch, [
+        "-d", root.path,
+        "-p1",
+        "-u",
+        "-V", "none",
+        "-i", root
+            .appendingPathComponent("scripts", isDirectory: true)
+            .appendingPathComponent("001-warnings-and-data-race.patch", isDirectory: false)
+            .path,
+    ], captureStdout: false)
 }
 
 @discardableResult
