@@ -164,26 +164,13 @@ public final class SQLiteConnection: SQLiteDatabase {
         _ onRow: @escaping (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
         logger.debug("\(query) \(binds)")
-        let promise = self.eventLoop.makePromise(of: Void.self)
         return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            do {
-                let statement = try SQLiteStatement(query: query, on: self)
-                try statement.bind(binds)
-                let columns = try statement.columns()
-                var callbacks: [EventLoopFuture<Void>] = []
-                while let row = try statement.nextRow(for: columns) {
-                    let callback = self.eventLoop.submit {
-                        onRow(row)
-                    }
-                    callbacks.append(callback)
-                }
-                EventLoopFuture<Void>.andAllSucceed(callbacks, on: self.eventLoop)
-                    .cascade(to: promise)
-            } catch {
-                promise.fail(error)
+            let statement = try SQLiteStatement(query: query, on: self)
+            try statement.bind(binds)
+            let columns = try statement.columns()
+            while let row = try statement.nextRow(for: columns) {
+                onRow(row)
             }
-        }.flatMap {
-            promise.futureResult
         }
     }
 
