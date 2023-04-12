@@ -22,7 +22,15 @@ public protocol SQLiteDatabase {
     ) -> EventLoopFuture<Void>
     #endif
     
-    func withConnection<T>(_: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T>
+    #if swift(>=5.7)
+    @preconcurrency func withConnection<T>(
+        _: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T>
+    #else
+    func withConnection<T>(
+        _: @escaping (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T>
+    #endif
 }
 
 extension SQLiteDatabase {
@@ -58,10 +66,30 @@ private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
     }
     let logger: Logger
     
-    func withConnection<T>(_ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+    #if swift(>=5.7)
+    @preconcurrency func withConnection<T>(
+        _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
         self.database.withConnection(closure)
     }
+    #else
+    func withConnection<T>(
+        _ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
+        self.database.withConnection(closure)
+    }
+    #endif
     
+    #if swift(>=5.7)
+    @preconcurrency func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void> {
+        self.database.query(query, binds, logger: logger, onRow)
+    }
+    #else
     func query(
         _ query: String,
         _ binds: [SQLiteData],
@@ -70,6 +98,7 @@ private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
     ) -> EventLoopFuture<Void> {
         self.database.query(query, binds, logger: logger, onRow)
     }
+    #endif
 }
 
 public final class SQLiteConnection: SQLiteDatabase {
@@ -162,9 +191,19 @@ public final class SQLiteConnection: SQLiteDatabase {
         }
     }
     
-    public func withConnection<T>(_ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+    #if swift(>=5.7)
+    @preconcurrency public func withConnection<T>(
+        _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
         closure(self)
     }
+    #else
+    public func withConnection<T>(
+        _ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
+        closure(self)
+    }
+    #endif
     
     #if swift(>=5.7)
     @preconcurrency public func query(
