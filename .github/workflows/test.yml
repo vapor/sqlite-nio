@@ -14,9 +14,9 @@ jobs:
 
   # Make sure downstream dependents still work
   dependents-check:
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    container: swift:5.7-jammy
+    container: swift:5.8-jammy
     steps:
       - name: Check out package
         uses: actions/checkout@v3
