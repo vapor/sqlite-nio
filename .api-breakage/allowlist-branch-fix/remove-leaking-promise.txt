@@ -1,0 +1,4 @@
+API breakage: func SQLiteDatabase.query(_:_:logger:_:) is now with @preconcurrency
+API breakage: func SQLiteDatabase.withConnection(_:) is now with @preconcurrency
+API breakage: func SQLiteConnection.withConnection(_:) is now with @preconcurrency
+API breakage: func SQLiteConnection.query(_:_:logger:_:) is now with @preconcurrency
