@@ -6,14 +6,31 @@ public protocol SQLiteDatabase {
     var logger: Logger { get }
     var eventLoop: EventLoop { get }
     
+    #if swift(>=5.7)
+    @preconcurrency func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void>
+    #else
     func query(
         _ query: String,
         _ binds: [SQLiteData],
         logger: Logger,
         _ onRow: @escaping (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void>
+    #endif
     
-    func withConnection<T>(_: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T>
+    #if swift(>=5.7)
+    @preconcurrency func withConnection<T>(
+        _: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T>
+    #else
+    func withConnection<T>(
+        _: @escaping (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T>
+    #endif
 }
 
 extension SQLiteDatabase {
@@ -49,10 +66,30 @@ private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
     }
     let logger: Logger
     
-    func withConnection<T>(_ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+    #if swift(>=5.7)
+    @preconcurrency func withConnection<T>(
+        _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
         self.database.withConnection(closure)
     }
+    #else
+    func withConnection<T>(
+        _ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
+        self.database.withConnection(closure)
+    }
+    #endif
     
+    #if swift(>=5.7)
+    @preconcurrency func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void> {
+        self.database.query(query, binds, logger: logger, onRow)
+    }
+    #else
     func query(
         _ query: String,
         _ binds: [SQLiteData],
@@ -61,6 +98,7 @@ private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
     ) -> EventLoopFuture<Void> {
         self.database.query(query, binds, logger: logger, onRow)
     }
+    #endif
 }
 
 public final class SQLiteConnection: SQLiteDatabase {
@@ -153,11 +191,41 @@ public final class SQLiteConnection: SQLiteDatabase {
         }
     }
     
-    public func withConnection<T>(_ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+    #if swift(>=5.7)
+    @preconcurrency public func withConnection<T>(
+        _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
         closure(self)
     }
+    #else
+    public func withConnection<T>(
+        _ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>
+    ) -> EventLoopFuture<T> {
+        closure(self)
+    }
+    #endif
     
+    #if swift(>=5.7)
+    @preconcurrency public func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void> {
+        self._query(query, binds, logger: logger, onRow)
+    }
+    #else
     public func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping (SQLiteRow) -> Void
+    ) -> EventLoopFuture<Void> {
+        self._query(query, binds, logger: logger, onRow)
+    }
+    #endif
+    
+    private func _query(
         _ query: String,
         _ binds: [SQLiteData],
         logger: Logger,
@@ -165,26 +233,26 @@ public final class SQLiteConnection: SQLiteDatabase {
     ) -> EventLoopFuture<Void> {
         logger.debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
-        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+        self.threadPool.submit {
+            guard case $0 = NIOThreadPool.WorkItemState.active else {
+                // Note: We should be throwing NIOThreadPoolError.ThreadPoolInactive here, but we can't
+                // 'cause its initializer isn't public so we let `SQLITE_MISUSE` get the point across.
+                return promise.fail(SQLiteError(reason: .misuse, message: "Thread pool is inactive"))
+            }
+            var futures: [EventLoopFuture<Void>] = []
             do {
                 let statement = try SQLiteStatement(query: query, on: self)
-                try statement.bind(binds)
                 let columns = try statement.columns()
-                var callbacks: [EventLoopFuture<Void>] = []
+                try statement.bind(binds)
                 while let row = try statement.nextRow(for: columns) {
-                    let callback = self.eventLoop.submit {
-                        onRow(row)
-                    }
-                    callbacks.append(callback)
+                    futures.append(self.eventLoop.submit { onRow(row) })
                 }
-                EventLoopFuture<Void>.andAllSucceed(callbacks, on: self.eventLoop)
-                    .cascade(to: promise)
             } catch {
-                promise.fail(error)
+                return promise.fail(error) // EventLoopPromise.fail(_:), conveniently, returns Void
             }
-        }.flatMap {
-            promise.futureResult
+            EventLoopFuture.andAllSucceed(futures, promise: promise)
         }
+        return promise.futureResult
     }
 
     public func close() -> EventLoopFuture<Void> {
