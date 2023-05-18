@@ -1,4 +1,4 @@
-import NIO
+import NIOCore
 import CSQLite
 
 internal struct SQLiteStatement {
