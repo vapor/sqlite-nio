@@ -1,9 +1,17 @@
-#if !BUILDING_DOCC
+#if swift(>=5.8)
 
-@_exported import struct NIO.ByteBuffer
-@_exported import class NIO.NIOThreadPool
-@_exported import protocol NIO.EventLoop
-@_exported import protocol NIO.EventLoopGroup
-@_exported import class NIO.MultiThreadedEventLoopGroup
+@_documentation(visibility: internal) @_exported import struct NIOCore.ByteBuffer
+@_documentation(visibility: internal) @_exported import class NIOPosix.NIOThreadPool
+@_documentation(visibility: internal) @_exported import protocol NIOCore.EventLoop
+@_documentation(visibility: internal) @_exported import protocol NIOCore.EventLoopGroup
+@_documentation(visibility: internal) @_exported import class NIOPosix.MultiThreadedEventLoopGroup
+
+#else
+
+@_exported import struct NIOCore.ByteBuffer
+@_exported import class NIOPosix.NIOThreadPool
+@_exported import protocol NIOCore.EventLoop
+@_exported import protocol NIOCore.EventLoopGroup
+@_exported import class NIOPosix.MultiThreadedEventLoopGroup
 
 #endif

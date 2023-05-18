@@ -1,4 +1,5 @@
 /// Supported SQLite column data types when defining schemas.
+@available(*, deprecated, message: "This type is unused.")
 public enum SQLiteDataType {
     /// `INTEGER`.
     case integer

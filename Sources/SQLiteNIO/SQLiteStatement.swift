@@ -1,4 +1,4 @@
-import NIO
+import NIOCore
 import CSQLite
 
 internal struct SQLiteStatement {
@@ -95,23 +95,22 @@ internal struct SQLiteStatement {
     // MARK: Private
 
     private func data(at offset: Int32) throws -> SQLiteData {
-        let type = try dataType(at: offset)
-        switch type {
-        case .integer:
+        switch sqlite_nio_sqlite3_column_type(self.handle, offset) {
+        case SQLITE_INTEGER:
             let val = sqlite_nio_sqlite3_column_int64(self.handle, offset)
             let integer = Int(val)
             return .integer(integer)
-        case .real:
+        case SQLITE_FLOAT:
             let val = sqlite_nio_sqlite3_column_double(self.handle, offset)
             let double = Double(val)
             return .float(double)
-        case .text:
+        case SQLITE_TEXT:
             guard let val = sqlite_nio_sqlite3_column_text(self.handle, offset) else {
                 throw SQLiteError(reason: .error, message: "Unexpected nil column text")
             }
             let string = String(cString: val)
             return .text(string)
-        case .blob:
+        case SQLITE_BLOB:
             let length = Int(sqlite_nio_sqlite3_column_bytes(self.handle, offset))
             var buffer = ByteBufferAllocator().buffer(capacity: length)
             if let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) {
@@ -121,16 +120,6 @@ internal struct SQLiteStatement {
                 ))
             }
             return .blob(buffer)
-        case .null: return .null
-        }
-    }
-
-    private func dataType(at offset: Int32) throws -> SQLiteDataType {
-        switch sqlite_nio_sqlite3_column_type(self.handle, offset) {
-        case SQLITE_INTEGER: return .integer
-        case SQLITE_FLOAT: return .real
-        case SQLITE_TEXT: return .text
-        case SQLITE_BLOB: return .blob
         case SQLITE_NULL: return .null
         default: throw SQLiteError(reason: .error, message: "Unexpected column type.")
         }

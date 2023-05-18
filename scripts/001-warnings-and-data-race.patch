@@ -7,7 +7,7 @@ index 536e9b1..01a3eb8 100644
 +#pragma clang diagnostic ignored "-Wshorten-64-to-32"
  /******************************************************************************
  ** This file is an amalgamation of many separate C source files from SQLite
- ** version 3.41.2.  By combining all the individual C code files into this
+ ** version 3.42.0.  By combining all the individual C code files into this
 @@ -165427,7 +165429,10 @@ SQLITE_API sqlite_int64 sqlite3_last_insert_rowid(sqlite3 *db){
      return 0;
    }

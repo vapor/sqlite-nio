@@ -15,10 +15,36 @@
     <a href="LICENSE">
         <img src="http://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT License">
     </a>
-    <a href="https://github.com/vapor/sqlite-nio/actions">
-        <img src="https://github.com/vapor/sqlite-nio/workflows/test/badge.svg" alt="Continuous Integration">
+    <a href="https://github.com/vapor/sqlite-nio/actions/workflows/test.yml">
+        <img src="https://github.com/vapor/sqlite-nio/actions/workflows/test.yml/badge.svg?action=push" alt="Continuous Integration">
     </a>
     <a href="https://swift.org">
-        <img src="http://img.shields.io/badge/swift-5.2-brightgreen.svg" alt="Swift 5.2">
+        <img src="http://img.shields.io/badge/swift-5.6-brightgreen.svg" alt="Swift 5.6">
+    </a>
+    <a href="https://swift.org">
+        <img src="http://img.shields.io/badge/swift-5.8-brightgreen.svg" alt="Swift 5.8">
     </a>
 </p>
+
+<br>
+
+🐬 Non-blocking, event-driven Swift client for [SQLite](https://sqlite.org) built on [SwiftNIO](https://github.com/apple/swift-nio).
+
+## Using SQLiteNIO
+
+Use standard SwiftPM syntax to include SQLiteNIO as a dependency in your `Package.swift` file:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/vapor/sqlite-nio.git", from: "1.0.0")
+]
+```
+
+### Supported Platforms
+
+SQLiteNIO supports all platforms on which NIO itself works. At the time of this writing, these include:
+
+- Ubuntu 20.04+
+- macOS 10.15+
+- iOS 13+
+- tvOS 13+ and watchOS 7+ (experimental)
