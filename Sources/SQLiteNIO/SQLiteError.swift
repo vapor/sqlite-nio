@@ -195,3 +195,5 @@ public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
         }
     }
 }
+
+extension SQLiteError.Reason: Sendable {}

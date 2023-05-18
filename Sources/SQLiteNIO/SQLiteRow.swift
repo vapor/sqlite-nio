@@ -40,3 +40,6 @@ final class SQLiteColumnOffsets {
         self.lookupTable = .init(offsets, uniquingKeysWith: { a, b in a })
     }
 }
+
+extension SQLiteRow: Sendable {}
+extension SQLiteColumnOffsets: Sendable {}

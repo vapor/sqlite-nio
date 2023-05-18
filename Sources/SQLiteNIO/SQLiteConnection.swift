@@ -5,40 +5,26 @@ import Logging
 
 public protocol SQLiteDatabase {
     var logger: Logger { get }
-    var eventLoop: EventLoop { get }
+    var eventLoop: any EventLoop { get }
     
-    #if swift(>=5.7)
     @preconcurrency func query(
         _ query: String,
         _ binds: [SQLiteData],
         logger: Logger,
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void>
-    #else
-    func query(
-        _ query: String,
-        _ binds: [SQLiteData],
-        logger: Logger,
-        _ onRow: @escaping (SQLiteRow) -> Void
-    ) -> EventLoopFuture<Void>
-    #endif
     
-    #if swift(>=5.7)
     @preconcurrency func withConnection<T>(
         _: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
     ) -> EventLoopFuture<T>
-    #else
-    func withConnection<T>(
-        _: @escaping (SQLiteConnection) -> EventLoopFuture<T>
-    ) -> EventLoopFuture<T>
-    #endif
 }
 
 extension SQLiteDatabase {
+    @preconcurrency
     public func query(
         _ query: String,
         _ binds: [SQLiteData] = [],
-        _ onRow: @escaping (SQLiteRow) -> Void
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
         self.query(query, binds, logger: self.logger, onRow)
     }
@@ -47,41 +33,32 @@ extension SQLiteDatabase {
         _ query: String,
         _ binds: [SQLiteData] = []
     ) -> EventLoopFuture<[SQLiteRow]> {
-        var rows: [SQLiteRow] = []
+        let rows: UnsafeMutableTransferBox<[SQLiteRow]> = .init([])
         return self.query(query, binds, logger: self.logger) { row in
-            rows.append(row)
-        }.map { rows }
+            rows.wrappedValue.append(row)
+        }.map { rows.wrappedValue }
     }
   }
 
 extension SQLiteDatabase {
-    public func logging(to logger: Logger) -> SQLiteDatabase {
+    public func logging(to logger: Logger) -> any SQLiteDatabase {
         _SQLiteDatabaseCustomLogger(database: self, logger: logger)
     }
 }
 
 private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
-    let database: SQLiteDatabase
-    var eventLoop: EventLoop {
+    let database: any SQLiteDatabase
+    var eventLoop: any EventLoop {
         self.database.eventLoop
     }
     let logger: Logger
     
-    #if swift(>=5.7)
     @preconcurrency func withConnection<T>(
         _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
     ) -> EventLoopFuture<T> {
         self.database.withConnection(closure)
     }
-    #else
-    func withConnection<T>(
-        _ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>
-    ) -> EventLoopFuture<T> {
-        self.database.withConnection(closure)
-    }
-    #endif
     
-    #if swift(>=5.7)
     @preconcurrency func query(
         _ query: String,
         _ binds: [SQLiteData],
@@ -90,16 +67,6 @@ private struct _SQLiteDatabaseCustomLogger: SQLiteDatabase {
     ) -> EventLoopFuture<Void> {
         self.database.query(query, binds, logger: logger, onRow)
     }
-    #else
-    func query(
-        _ query: String,
-        _ binds: [SQLiteData],
-        logger: Logger,
-        _ onRow: @escaping (SQLiteRow) -> Void
-    ) -> EventLoopFuture<Void> {
-        self.database.query(query, binds, logger: logger, onRow)
-    }
-    #endif
 }
 
 public final class SQLiteConnection: SQLiteDatabase {
@@ -113,7 +80,7 @@ public final class SQLiteConnection: SQLiteDatabase {
         case file(path: String)
     }
 
-    public let eventLoop: EventLoop
+    public let eventLoop: any EventLoop
     
     internal var handle: OpaquePointer?
     internal let threadPool: NIOThreadPool
@@ -127,7 +94,7 @@ public final class SQLiteConnection: SQLiteDatabase {
         storage: Storage = .memory,
         threadPool: NIOThreadPool,
         logger: Logger = .init(label: "codes.vapor.sqlite"),
-        on eventLoop: EventLoop
+        on eventLoop: any EventLoop
     ) -> EventLoopFuture<SQLiteConnection> {
         let path: String
         switch storage {
@@ -161,7 +128,7 @@ public final class SQLiteConnection: SQLiteDatabase {
         handle: OpaquePointer?,
         threadPool: NIOThreadPool,
         logger: Logger,
-        on eventLoop: EventLoop
+        on eventLoop: any EventLoop
     ) {
         self.handle = handle
         self.threadPool = threadPool
@@ -178,7 +145,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
     
     public func lastAutoincrementID() -> EventLoopFuture<Int> {
-        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             let rowid = sqlite_nio_sqlite3_last_insert_rowid(self.handle)
             return numericCast(rowid)
         }
@@ -192,45 +159,17 @@ public final class SQLiteConnection: SQLiteDatabase {
         }
     }
     
-    #if swift(>=5.7)
     @preconcurrency public func withConnection<T>(
         _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
     ) -> EventLoopFuture<T> {
         closure(self)
     }
-    #else
-    public func withConnection<T>(
-        _ closure: @escaping (SQLiteConnection) -> EventLoopFuture<T>
-    ) -> EventLoopFuture<T> {
-        closure(self)
-    }
-    #endif
     
-    #if swift(>=5.7)
     @preconcurrency public func query(
         _ query: String,
         _ binds: [SQLiteData],
         logger: Logger,
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
-    ) -> EventLoopFuture<Void> {
-        self._query(query, binds, logger: logger, onRow)
-    }
-    #else
-    public func query(
-        _ query: String,
-        _ binds: [SQLiteData],
-        logger: Logger,
-        _ onRow: @escaping (SQLiteRow) -> Void
-    ) -> EventLoopFuture<Void> {
-        self._query(query, binds, logger: logger, onRow)
-    }
-    #endif
-    
-    private func _query(
-        _ query: String,
-        _ binds: [SQLiteData],
-        logger: Logger,
-        _ onRow: @escaping (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
         logger.debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
@@ -257,7 +196,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
 
     public func close() -> EventLoopFuture<Void> {
-        self.threadPool.runIfActive(eventLoop: self.eventLoop) { 
+        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             sqlite_nio_sqlite3_close(self.handle)
         }.map { _ in
             self.handle = nil
@@ -282,3 +221,11 @@ public final class SQLiteConnection: SQLiteDatabase {
         assert(self.handle == nil, "SQLiteConnection was not closed before deinitializing")
     }
 }
+
+final class UnsafeMutableTransferBox<Wrapped>: @unchecked Sendable {
+    var wrappedValue: Wrapped
+    init(_ wrappedValue: Wrapped) { self.wrappedValue = wrappedValue }
+}
+
+extension SQLiteConnection.Storage: Sendable {}
+extension SQLiteConnection: @unchecked Sendable {}

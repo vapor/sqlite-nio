@@ -137,3 +137,5 @@ extension SQLiteData {
         public let type: Int32
     }
 }
+
+extension SQLiteData: Sendable {}

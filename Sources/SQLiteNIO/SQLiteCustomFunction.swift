@@ -38,7 +38,7 @@ public final class SQLiteCustomFunction: Hashable {
         _ name: String,
         argumentCount: Int32? = nil,
         pure: Bool = false,
-        function: @escaping ([SQLiteData]) throws -> SQLiteDataConvertible?)
+        function: @escaping ([SQLiteData]) throws -> (any SQLiteDataConvertible)?)
     {
         self.identity = Identity(name: name, nArg: argumentCount ?? -1)
         self.pure = pure
@@ -149,8 +149,8 @@ public final class SQLiteCustomFunction: Hashable {
     /// Feeds the `pApp` parameter of sqlite3_create_function_v2
     /// http://sqlite.org/capi3ref.html#sqlite3_create_function
     private class FunctionDefinition {
-        let compute: (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> SQLiteDataConvertible?
-        init(compute: @escaping (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> SQLiteDataConvertible?) {
+        let compute: (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?
+        init(compute: @escaping (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?) {
             self.compute = compute
         }
     }
@@ -159,17 +159,17 @@ public final class SQLiteCustomFunction: Hashable {
     /// Feeds the `pApp` parameter of sqlite3_create_function_v2
     /// http://sqlite.org/capi3ref.html#sqlite3_create_function
     private class AggregateDefinition {
-        let makeAggregate: () -> SQLiteCustomAggregate
-        init(makeAggregate: @escaping () -> SQLiteCustomAggregate) {
+        let makeAggregate: () -> any SQLiteCustomAggregate
+        init(makeAggregate: @escaping () -> any SQLiteCustomAggregate) {
             self.makeAggregate = makeAggregate
         }
     }
 
     /// The current state of an aggregate, storable in SQLite
     private class AggregateContext {
-        var aggregate: SQLiteCustomAggregate
+        var aggregate: any SQLiteCustomAggregate
         var hasErrored = false
-        init(aggregate: SQLiteCustomAggregate) {
+        init(aggregate: any SQLiteCustomAggregate) {
             self.aggregate = aggregate
         }
     }
@@ -178,10 +178,10 @@ public final class SQLiteCustomFunction: Hashable {
     /// See http://sqlite.org/capi3ref.html#sqlite3_create_function
     private enum Kind {
         /// A regular function: SELECT f(1)
-        case function((Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> SQLiteDataConvertible?)
+        case function((Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?)
 
         /// An aggregate: SELECT f(foo) FROM bar GROUP BY baz
-        case aggregate(() -> SQLiteCustomAggregate)
+        case aggregate(() -> any SQLiteCustomAggregate)
 
         /// Feeds the `pApp` parameter of sqlite3_create_function_v2
         /// http://sqlite.org/capi3ref.html#sqlite3_create_function
@@ -291,7 +291,7 @@ public final class SQLiteCustomFunction: Hashable {
         }
     }
 
-    private static func report(result: SQLiteDataConvertible?, in sqliteContext: OpaquePointer?) {
+    private static func report(result: (any SQLiteDataConvertible)?, in sqliteContext: OpaquePointer?) {
         switch result?.sqliteData ?? .null {
         case .null:
             sqlite_nio_sqlite3_result_null(sqliteContext)
@@ -317,29 +317,6 @@ public final class SQLiteCustomFunction: Hashable {
         }
     }
 }
-
-#if swift(<5.7)
-extension UnsafeMutableRawBufferPointer {
-    /// Horribly hacked-up shim of this method from SE-0333 for the 5.5/5.6 stdlib.
-    ///
-    /// This is not an especially high-quality implementation, but it doesn't seem to give ASan,
-    /// TSan, or UBSan any headaches.
-    ///
-    /// Besides, 	with 5.7 already recommended for all users, it'd feel rather silly to invest lots of
-    /// time in making this one method pass a rigorous mathematical proof.
-    public func withMemoryRebound<T, Result>(
-        to type: T.Type,
-        _ body: (_ buffer: UnsafeMutableBufferPointer<T>) throws -> Result
-    ) rethrows -> Result {
-        assert(Int(bitPattern: self.baseAddress) & (MemoryLayout<T>.alignment - 1) == 0)
-        
-        return try UnsafeMutableBufferPointer<T>(
-            start: .init(bitPattern: Int(bitPattern: self.baseAddress)),
-            count: self.count / MemoryLayout<T>.stride
-        ).withMemoryRebound(to: T.self, body)
-    }
-}
-#endif
 
 extension SQLiteCustomFunction {
     /// :nodoc:
@@ -398,5 +375,7 @@ public protocol SQLiteCustomAggregate {
     mutating func step(_ values: [SQLiteData]) throws
 
     /// Returns the final result
-    func finalize() throws -> SQLiteDataConvertible?
+    func finalize() throws -> (any SQLiteDataConvertible)?
 }
+
+extension SQLiteCustomFunction: @unchecked Sendable {}
