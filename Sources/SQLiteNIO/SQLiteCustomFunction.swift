@@ -25,7 +25,7 @@ public final class SQLiteCustomFunction: Hashable {
     /// The name of the SQL function
     public var name: String { identity.name }
     private let identity: Identity
-    let pure: Bool
+    private let pure: Bool
     private let kind: Kind
     private var eTextRep: Int32 { (SQLITE_UTF8 | (pure ? SQLITE_DETERMINISTIC : 0)) }
 
@@ -58,42 +58,39 @@ public final class SQLiteCustomFunction: Hashable {
     ///
     /// For example:
     ///
-    ///     struct MySum: SQLiteCustomAggregate {
+    ///     struct MySum: DatabaseAggregate {
     ///         var sum: Int = 0
     ///
-    ///         mutating func step(_ values: [SQLiteData]) {
-    ///             if let int = dbValues[0].integer {
-    ///                 sum += int
-    ///             }
+    ///         mutating func step(_ dbValues: [SQLiteData]) {
+    ///             sum += dbValues[0].integer ?? 0
     ///         }
     ///
-    ///         func finalize() -> SQLiteDataConvertible? {
-    ///             return sum
+    ///         func finalize() -> (any SQLiteDataConvertible)? {
+    ///             sum
     ///         }
     ///     }
     ///
     ///     let connection: SQLiteConnection = ...
-    ///     let fn = SQLiteCustomFunction("mysum", argumentCount: 1, aggregate: MySum.self)
-    ///     fn.install(in: connection)
-    ///     try connection.query("CREATE TABLE test(i)").wait()
-    ///     try connection.query("INSERT INTO test(i) VALUES (1)").wait()
-    ///     try connection.query("INSERT INTO test(i) VALUES (2)").wait()
-    ///     try connection.query("SELECT mysum(i) FROM test").wait()! // 3
-    ///     }
+    ///     let fn = SQLiteCustomFunction("mysum", argumentCount: 1, pure: true, aggregate: MySum.self)
+    ///     try await connection.install(customFunction: fn).get()
+    ///     try await connection.query("CREATE TABLE test(i)").get()
+    ///     try await connection.query("INSERT INTO test(i) VALUES (1)").get()
+    ///     try await connection.query("INSERT INTO test(i) VALUES (2)").get()
+    ///     let sum = (try await connection.query("SELECT mysum(i) FROM test").get().first?.columns.first?.integer)! // 3
     ///
-    /// - parameters:
-    ///     - name: The function name.
-    ///     - argumentCount: The number of arguments of the aggregate. If
-    ///       omitted, or nil, the aggregate accepts any number of arguments.
-    ///     - pure: Whether the aggregate is "pure", which means that its
-    ///       results only depends on its inputs. When an aggregate is pure,
-    ///       SQLite has the opportunity to perform additional optimizations.
-    ///       Default value is false.
-    ///     - aggregate: A type that implements the DatabaseAggregate protocol.
-    ///       For each step of the aggregation, its `step` method is called with
-    ///       an array of DatabaseValue arguments. The array is guaranteed to
-    ///       have exactly *argumentCount* elements, provided *argumentCount* is
-    ///       not nil.
+    /// - Parameters:
+    ///   - name: The function name.
+    ///   - argumentCount: The number of arguments of the aggregate. If
+    ///     omitted, or nil, the aggregate accepts any number of arguments.
+    ///   - pure: Whether the aggregate is "pure", which means that its
+    ///     results only depends on its inputs. When an aggregate is pure,
+    ///     SQLite has the opportunity to perform additional optimizations.
+    ///     Default value is false.
+    ///   - aggregate: A type that implements the ``SQLiteCustomAggregate`` protocol.
+    ///     For each step of the aggregation, its ``SQLiteCustomAggregate/step(_:)``
+    ///     method is called with an array of DatabaseValue arguments. The array
+    ///     is guaranteed to have exactly ``argumentCount`` elements, provided
+    ///     ``argumentCount`` is not nil.
     public init<Aggregate: SQLiteCustomAggregate>(
         _ name: String,
         argumentCount: Int32? = nil,
@@ -105,7 +102,7 @@ public final class SQLiteCustomFunction: Hashable {
         self.kind = .aggregate { Aggregate() }
     }
 
-    /// Calls sqlite3_create_function_v2
+    /// Invokes `sqlite3_create_function_v2()` to install a custom function.
     /// See https://sqlite.org/c3ref/create_function.html
     func install(in connection: SQLiteConnection) throws {
         // Retain the function definition
@@ -130,7 +127,8 @@ public final class SQLiteCustomFunction: Hashable {
             throw SQLiteError(statusCode: code, connection: connection)
         }
     }
-    /// Calls sqlite3_create_function_v2
+    
+    /// Invokes `sqlite3_create_function_v2()` to uninstall a custom function.
     /// See https://sqlite.org/c3ref/create_function.html
     func uninstall(in connection: SQLiteConnection) throws {
         let code = sqlite_nio_sqlite3_create_function_v2(
@@ -146,7 +144,7 @@ public final class SQLiteCustomFunction: Hashable {
     }
 
     /// The way to compute the result of a function.
-    /// Feeds the `pApp` parameter of sqlite3_create_function_v2
+    /// Feeds the `pApp` parameter of `sqlite3_create_function_v2()`.
     /// http://sqlite.org/capi3ref.html#sqlite3_create_function
     private class FunctionDefinition {
         let compute: (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?
@@ -156,7 +154,7 @@ public final class SQLiteCustomFunction: Hashable {
     }
 
     /// The way to start an aggregate.
-    /// Feeds the `pApp` parameter of sqlite3_create_function_v2
+    /// Feeds the `pApp` parameter of `sqlite3_create_function_v2()`.
     /// http://sqlite.org/capi3ref.html#sqlite3_create_function
     private class AggregateDefinition {
         let makeAggregate: () -> any SQLiteCustomAggregate
@@ -165,8 +163,8 @@ public final class SQLiteCustomFunction: Hashable {
         }
     }
 
-    /// The current state of an aggregate, storable in SQLite
-    private class AggregateContext {
+    /// The current state of an aggregate, storable in SQLite.
+    private final class AggregateContext {
         var aggregate: any SQLiteCustomAggregate
         var hasErrored = false
         init(aggregate: any SQLiteCustomAggregate) {
@@ -177,13 +175,13 @@ public final class SQLiteCustomFunction: Hashable {
     /// A function kind: an "SQL function" or an "aggregate".
     /// See http://sqlite.org/capi3ref.html#sqlite3_create_function
     private enum Kind {
-        /// A regular function: SELECT f(1)
+        /// A regular function: `SELECT f(1)`
         case function((Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?)
 
-        /// An aggregate: SELECT f(foo) FROM bar GROUP BY baz
+        /// An aggregate: `SELECT f(foo) FROM bar GROUP BY baz`
         case aggregate(() -> any SQLiteCustomAggregate)
 
-        /// Feeds the `pApp` parameter of sqlite3_create_function_v2
+        /// Feeds the `pApp` parameter of `sqlite3_create_function_v2()`.
         /// http://sqlite.org/capi3ref.html#sqlite3_create_function
         var definition: AnyObject {
             switch self {
@@ -194,7 +192,7 @@ public final class SQLiteCustomFunction: Hashable {
             }
         }
 
-        /// Feeds the `xFunc` parameter of sqlite3_create_function_v2
+        /// Feeds the `xFunc` parameter of `sqlite3_create_function_v2()`.
         /// http://sqlite.org/capi3ref.html#sqlite3_create_function
         var xFunc: (@convention(c) (OpaquePointer?, Int32, UnsafeMutablePointer<OpaquePointer?>?) -> Void)? {
             guard case .function = self else { return nil }
@@ -212,7 +210,7 @@ public final class SQLiteCustomFunction: Hashable {
             }
         }
 
-        /// Feeds the `xStep` parameter of sqlite3_create_function_v2
+        /// Feeds the `xStep` parameter of `sqlite3_create_function_v2()`.
         /// http://sqlite.org/capi3ref.html#sqlite3_create_function
         var xStep: (@convention(c) (OpaquePointer?, Int32, UnsafeMutablePointer<OpaquePointer?>?) -> Void)? {
             guard case .aggregate = self else { return nil }
@@ -236,7 +234,7 @@ public final class SQLiteCustomFunction: Hashable {
             }
         }
 
-        /// Feeds the `xFinal` parameter of sqlite3_create_function_v2
+        /// Feeds the `xFinal` parameter of `sqlite3_create_function_v2()`.
         /// http://sqlite.org/capi3ref.html#sqlite3_create_function
         var xFinal: (@convention(c) (OpaquePointer?) -> Void)? {
             guard case .aggregate = self else { return nil }
@@ -319,13 +317,13 @@ public final class SQLiteCustomFunction: Hashable {
 }
 
 extension SQLiteCustomFunction {
-    /// :nodoc:
+    /// See ``Hashable/has(into:)``.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(identity)
     }
 
     /// Two functions are equal if they share the same name and arity.
-    /// :nodoc:
+    /// See ``Equatable/==(lhs:rhs:)``.
     public static func == (lhs: SQLiteCustomFunction, rhs: SQLiteCustomFunction) -> Bool {
         lhs.identity == rhs.identity
     }
@@ -335,29 +333,29 @@ extension SQLiteCustomFunction {
 ///
 /// For example:
 ///
-///     struct MySum : DatabaseAggregate {
+///     struct MySum: DatabaseAggregate {
 ///         var sum: Int = 0
 ///
-///         mutating func step(_ dbValues: [DatabaseValue]) {
-///             if let int = Int.fromDatabaseValue(dbValues[0]) {
+///         mutating func step(_ dbValues: [SQLiteData]) {
+///             if let int = dbValues[0].integer {
 ///                 sum += int
 ///             }
 ///         }
 ///
-///         func finalize() -> DatabaseValueConvertible? {
-///             return sum
+///         func finalize() -> (any SQLiteDataConvertible)? {
+///             sum
 ///         }
 ///     }
 ///
 ///     let connection: SQLiteConnection = ...
 ///     let fn = SQLiteCustomFunction("mysum", argumentCount: 1, aggregate: MySum.self)
-///     try connection.install(customFunction: fn).wait()
-///     try connection.query("CREATE TABLE test(i)").wait()
-///     try connection.query("INSERT INTO test(i) VALUES (1)").wait()
-///     try connection.query("INSERT INTO test(i) VALUES (2)").wait()
-///     let sum: Int = try connection.query("SELECT mysum(i) FROM test")!.wait()
+///     try await connection.install(customFunction: fn).get()
+///     try await connection.query("CREATE TABLE test(i)").get()
+///     try await connection.query("INSERT INTO test(i) VALUES (1)").get()
+///     try await connection.query("INSERT INTO test(i) VALUES (2)").get()
+///     let sum = (try await connection.query("SELECT mysum(i) FROM test").get().first?.columns.first?.integer)!
 public protocol SQLiteCustomAggregate {
-    /// Creates an aggregate.
+    /// Create an aggregate.
     init()
 
     /// This method is called at each step of the aggregation.
@@ -365,16 +363,16 @@ public protocol SQLiteCustomAggregate {
     /// The dbValues argument contains as many values as given to the SQL
     /// aggregate function.
     ///
-    ///    -- One value
-    ///    SELECT maxLength(name) FROM player
+    ///     -- One value
+    ///     SELECT maxLength(name) FROM player
     ///
-    ///    -- Two values
-    ///    SELECT maxFullNameLength(firstName, lastName) FROM player
+    ///     -- Two values
+    ///     SELECT maxFullNameLength(firstName, lastName) FROM player
     ///
-    /// This method is never called after the finalize() method has been called.
+    /// This method is never called after the ``finalize()`` method has been called.
     mutating func step(_ values: [SQLiteData]) throws
 
-    /// Returns the final result
+    /// Return the final result. Called only once, at the end of the aggregation.
     func finalize() throws -> (any SQLiteDataConvertible)?
 }
 
