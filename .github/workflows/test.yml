@@ -37,6 +37,6 @@ jobs:
         run: swift test --package-path fluent-sqlite-driver --sanitize=thread
 
   unit-tests:
-    uses: vapor/ci/.github/workflows/run-unit-tests.yml@reusable-workflows
+    uses: vapor/ci/.github/workflows/run-unit-tests.yml@main
     with:
       with_coverage: true
