@@ -1,0 +1,40 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" id="technology">
+  <style>
+    @media (prefers-color-scheme: light) {
+      :root, body[data-color-scheme="auto"], body[data-color-scheme="light"] {
+        --color-documentation-intro-accent-outer: #333;
+        --color-documentation-intro-accent-inner: #fff;
+      }
+      body[data-color-scheme="dark"] {
+        --color-documentation-intro-accent-outer: #fff;
+        --color-documentation-intro-accent-inner: #333;
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root, body[data-color-scheme="auto"], body[data-color-scheme="dark"] {
+        --color-documentation-intro-accent-outer: #fff;
+        --color-documentation-intro-accent-inner: #333;
+      }
+      body[data-color-scheme="light"] {
+        --color-documentation-intro-accent-outer: #333;
+        --color-documentation-intro-accent-inner: #fff;
+      }
+    }
+  </style>
+  <linearGradient id="a" x1="32.84" x2="88.78" y1="46.07" y2="46.07" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#3dc4ff" offset="0"/>
+    <stop stop-color="#e040fb" offset="0.75"/>
+  </linearGradient>
+  <path d="M7,46.84,62.66,0,121,46.84v.33L64,92,7,47.17Z" style="fill: var(--color-documentation-intro-accent-outer);"/>
+  <path d="m64.33,92.04h.33c.1,5.6,.1,9.76,0,12.46s-.18,2.7-.33,0l-57.33-45.06v-12.44z" fill="#40c4ff"/>
+  <path d="m64.66,116.2-.33.4-57.33-45.06v-12.44l57.33,45h.33z" fill="#3dc4ff"/>
+  <path d="m64.66,116.2-.33.4-57.33-45.06v-12.44l57.33,45h.33z" fill="#fff" fill-opacity=".25"/>
+  <path d="m64.66,127.7-.33.3-57.33-45.04v-11.76l57.33,45,.33-.3z" fill="#3dc4ff"/>
+  <path d="m64.66,127.7-.33.3-57.33-45.04v-11.76l57.33,45,.33-.3z" fill="#fff" fill-opacity=".5"/>
+  <path d="m64,92.04v12.46l57-45.06v-12.44z" fill="#e040fb"/>
+  <path d="m121,71.54v-12.44l-57,45v12.5z" fill="#e040fb"/>
+  <path d="m121,71.54v-12.44l-57,45v12.5z" fill="#fff" fill-opacity=".25"/>
+  <path d="m121,83.3v-12.1l-57,45v11.8z" fill="#e040fb"/>
+  <path d="m121,83.3v-12.1l-57,45v11.8z" fill="#fff" fill-opacity=".5"/>
+  <path style="fill: var(--color-documentation-intro-accent-inner);" transform="translate(64, 44.5) rotate(-43) translate(-57, -44.5)" stroke="url(#a)" d="M79,66.91C78.47,67.02,77.95,67.2,77.35,67.3C69.33,68.92,61.3,70.54,52.99,71.53C50.04,71.92,47.07,72.1,43.98,71.94C43.16,71.9,42.32,71.72,41.48,71.53C40.49,71.28,40.27,70.65,40.27,70.65C40.27,70.65,40.27,70.65,40.26,70.58C40.25,70.51,40.25,70.51,40.24,70.45C39.96,62.32,41.18,54.68,43.54,47.38C45.45,41.35,48.04,35.76,51.73,30.77C53.92,27.82,56.43,25.23,59.57,23.28C59.57,23.28,59.63,23.22,59.63,23.22C59.69,23.15,59.74,23.02,59.66,22.95C58.52,23.57,57.37,24.12,56.31,24.82C50.41,28.59,46.21,33.82,43.1,40.06C40.71,45.05,39.28,50.63,38.48,56.38C38.19,57.25,37.85,56.76,37.74,56.41C36.12,52.98,35.18,49.53,35.05,46.04C34.42,33.81,39.78,25.51,49.72,20.44C51.83,19.4,54.1,18.56,56.41,18.01C60.29,16.98,64.92,16.96,67.38,17.02C68,17.05,68.42,17.62,68.14,18.08C67.1,20,66.59,23.79,66.52,23.79C66.23,25.14,66.17,26.77,66.03,28.26C65.98,28.4,66.02,28.67,65.97,28.8C65.66,31.58,58.33,33.78,58.33,33.78L65.48,33.75C65.24,35.51,64.85,37.2,64.5,38.61C64.51,38.68,64.51,38.68,64.45,38.74C64.46,38.81,64.41,38.94,64.35,39.01C62.69,44.92,60.31,48,60.07,48.26C58.03,51.28,55.44,53.8,52.39,55.96C50.15,57.55,47.68,58.91,45.35,60.36C45.17,60.48,45.04,60.55,44.99,60.68C44.94,60.81,44.88,60.88,44.83,61.01L41.2,69.95L46.75,69.7C57.73,69.81,68.34,68.19,79,66.91Z"/>
+</svg>

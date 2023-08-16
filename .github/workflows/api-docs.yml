@@ -11,5 +11,4 @@ jobs:
      with:
        package_name: sqlite-nio
        modules: SQLiteNIO
-       pathsToInvalidate: /sqlitenio
-
+       pathsToInvalidate: /sqlitenio/*
