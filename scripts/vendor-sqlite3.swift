@@ -35,21 +35,12 @@ let vendorPrefix = "sqlite_nio"
 let root = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .deletingLastPathComponent()
-let cSQLiteDirectory = root
-    .appendingPathComponent("Sources")
-    .appendingPathComponent("CSQLite")
-let cSQLiteIncludeDirectory = cSQLiteDirectory
-    .appendingPathComponent("include")
-let versionFile = cSQLiteDirectory
-    .appendingPathComponent("version.txt")
-let sqlite3Source = cSQLiteDirectory
-    .appendingPathComponent("sqlite3.c")
-let sqlite3Header = cSQLiteIncludeDirectory
-    .appendingPathComponent("sqlite3.h")
-let vendorHeader = cSQLiteIncludeDirectory
-    .appendingPathComponent("sqlite3_vendor.h")
-let packageFile = root
-    .appendingPathComponent("Package.swift")
+let cSQLiteDirectory = root.appending(components: "Sources", "CSQLite", directoryHint: .isDirectory)
+let cSQLiteIncludeDirectory = cSQLiteDirectory.appending(component: "include", directoryHint: .isDirectory)
+let versionFile = cSQLiteDirectory.appending(component: "version.txt", directoryHint: .notDirectory)
+let vendoredSqlite3Source = cSQLiteDirectory.appending(component: "sqlitenio_sqlite3.c", directoryHint: .notDirectory)
+let vendoredSqlite3Header = cSQLiteIncludeDirectory.appending(component: "sqlitenio_sqlite3.h", directoryHint: .notDirectory)
+let packageManifest = root.appending(component: "Package.swift", directoryHint: .notDirectory)
 
 let unzip: URL!
 let sqlite3: URL!
@@ -68,8 +59,8 @@ do {
     patch = try await ensureExecutable("patch")
 
     try await main()
-} catch let error as String {
-    print(error)
+} catch let error as VendoringError {
+    print(error.description)
     exit(-1)
 }
 
@@ -81,14 +72,14 @@ func main() async throws {
     guard !args.contains(where: { $0 == "-h" || $0 == "--help" }),
           let command = args.popFirst() else
     {
-        throw usage
+        throw VendoringError(usage)
     }
 
     switch command {
         case "bump-latest-version": try await bumpVersion(args)
         case "print-system-sqlite-options": try await printSystemSQLiteCompileOptions(args)
         case "update-version": try await updateVersion(args)
-        default: throw usage
+        default: throw VendoringError(usage)
     }
 }
 
@@ -102,7 +93,7 @@ func bumpVersion(_ args: ArraySlice<String>) async throws {
     let sqliteDownloadURL = URL(string: "\(sqliteURL)/download.html")!
     let (data, _) = try await URLSession.shared.data(from: sqliteDownloadURL)
     guard let content = String(data: data, encoding: .utf8) else {
-        throw "Invalid data returned from \(sqliteDownloadURL)"
+        throw VendoringError("Invalid data returned from \(sqliteDownloadURL)")
     }
 
     var amalgamationProduct: String?
@@ -114,7 +105,7 @@ func bumpVersion(_ args: ArraySlice<String>) async throws {
     }
 
     guard let amalgamationProduct = amalgamationProduct else {
-        throw "SQLite amalgamation product not found at \(sqliteDownloadURL)"
+        throw VendoringError("SQLite amalgamation product not found at \(sqliteDownloadURL)")
     }
 
     let product = try ProductInfo(from: amalgamationProduct)
@@ -140,11 +131,11 @@ func bumpVersion(_ args: ArraySlice<String>) async throws {
 
 /// print-system-sqlite-options
 func printSystemSQLiteCompileOptions(_ args: ArraySlice<String>) async throws {
-    guard let compileOptions = try await subprocess(sqlite3, [":memory:", "PRAGMA compile_options;"], captureStdout: true) else {
-        throw "Unknown sqlite3 compile options"
+    guard let compileOptions = try await subprocess(sqlite3, [":memory:", "PRAGMA compile_options;"]) else {
+        throw VendoringError("Unknown sqlite3 compile options")
     }
-    guard let sqliteVersion = try await subprocess(sqlite3, ["--version"], captureStdout: true) else {
-        throw "Unknown sqlite3 version"
+    guard let sqliteVersion = try await subprocess(sqlite3, ["--version"]) else {
+        throw VendoringError("Unknown sqlite3 version")
     }
 
     let optionsArray = compileOptions.split(separator: "\n")
@@ -181,7 +172,7 @@ func updateVersion(_ args: ArraySlice<String>) async throws {
           yearAndVersion.count == 2,
           let year = Int(yearAndVersion[0]),
           let version = Version(from: String(yearAndVersion[1])) else {
-        throw "Invalid year and version: \(String(describing: yearVersion))"
+        throw VendoringError("Invalid year and version: \(String(describing: yearVersion))")
     }
 
     let currentVersion = Version(from: versionFile)
@@ -274,18 +265,18 @@ struct ProductInfo {
     init(from csvRow: String) throws {
         let columns = csvRow.split(separator: ",")
         guard columns.count == 5 else {
-            throw "Invalid product info, expecting 5 columns in \(csvRow)"
+            throw VendoringError("Invalid product info, expecting 5 columns in \(csvRow)")
         }
         guard let version = Version(from: String(columns[1])) else {
-            throw "Invalid product version \(columns[1])"
+            throw VendoringError("Invalid product version \(columns[1])")
         }
         let relativeURL = columns[2]
         guard let downloadURL = URL(string: "\(sqliteURL)/\(relativeURL)"),
               let filename = relativeURL.split(separator: "/").last else {
-            throw "Invalid product relative URL \(relativeURL)"
+            throw VendoringError("Invalid product relative URL \(relativeURL)")
         }
         guard let sizeInBytes = Int(columns[3]) else {
-            throw "Invalid product archive size \(columns[3])"
+            throw VendoringError("Invalid product archive size \(columns[3])")
         }
 
         self.version = version
@@ -300,21 +291,20 @@ func downloadAndUnzipSQLite(from url: URL, to filename: String, expectedSize: In
     let (productData, _) = try await URLSession.shared.data(from: url)
     if let expectedSize = expectedSize {
         guard productData.count == expectedSize else {
-            throw "Downloaded SQLite archive size \(productData.count) does not match expected \(expectedSize)"
+            throw VendoringError("Downloaded SQLite archive size \(productData.count) does not match expected \(expectedSize)")
         }
     }
-    let file = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent(filename)
+    let file = URL.currentDirectory().appending(component: filename)
     let directory = file.deletingPathExtension()
     try productData.write(to: file)
     if let expectedSha3Sum = expectedSha3Sum {
-        let sha3Output = try await subprocess(sha3sum, ["-z", "-a", "256", file.path], captureStdout: true)
+        let sha3Output = try await subprocess(sha3sum, ["-z", "-a", "256", file.path])
         guard let sha3AndFile = sha3Output?.split(separator: " "),
               sha3AndFile.count == 2 else {
-            throw "Unknown sha3 sum: \(String(describing: sha3Output))"
+            throw VendoringError("Unknown sha3 sum: \(String(describing: sha3Output))")
         }
         guard expectedSha3Sum == sha3AndFile[0] else {
-            throw "Unexpected sha3: \(expectedSha3Sum) != \(sha3AndFile[0])"
+            throw VendoringError("Unexpected sha3: \(expectedSha3Sum) != \(sha3AndFile[0])")
         }
     }
     defer {
@@ -324,85 +314,71 @@ func downloadAndUnzipSQLite(from url: URL, to filename: String, expectedSize: In
 
     try await subprocess(unzip, [file.path], captureStdout: false)
 
-    _ = try FileManager.default.replaceItemAt(sqlite3Source, withItemAt: directory.appendingPathComponent("sqlite3.c"))
-    _ = try FileManager.default.replaceItemAt(sqlite3Header, withItemAt: directory.appendingPathComponent("sqlite3.h"))
+    _ = try FileManager.default.replaceItemAt(vendoredSqlite3Source, withItemAt: directory.appendingPathComponent("sqlite3.c"))
+    _ = try FileManager.default.replaceItemAt(vendoredSqlite3Header, withItemAt: directory.appendingPathComponent("sqlite3.h"))
 }
 
 /// Adds our vendor prefix to both sqlite.c and sqlite.h to avoid potential namespace collisions with other versions of sqlite.
 func addVendorPrefixToSQLite() async throws {
     let symbols = try await getSymbolsToPrefix()
-    print("Prefixing symbols in \(sqlite3Header.lastPathComponent) with \"\(vendorPrefix)\"...")
-    try await addPrefix(vendorPrefix, to: symbols, in: sqlite3Header)
-    print("Prefixing symbols in \(sqlite3Source.lastPathComponent) with \"\(vendorPrefix)\"...")
-    try await addPrefix(vendorPrefix, to: symbols, in: sqlite3Source)
+    print("Prefixing symbols in \(vendoredSqlite3Header.lastPathComponent) with \"\(vendorPrefix)\"...")
+    try await addPrefix(vendorPrefix, to: symbols, in: vendoredSqlite3Header)
+    print("Prefixing symbols in \(vendoredSqlite3Source.lastPathComponent) with \"\(vendorPrefix)\"...")
+    try await addPrefix(vendorPrefix, to: symbols, in: vendoredSqlite3Source)
 }
 
 /// Add the given prefix to every string in symbols in the given file.
 func addPrefix(_ prefix: String, to symbols: [String], in url: URL) async throws {
     // Use streaming reads so we don't load the entire file into memory
     guard let readHandle = FileHandle(forReadingAtPath: url.path) else {
-        throw "Cannot open \(url.path) for reading"
+        throw VendoringError("Cannot open \(url.path) for reading")
     }
     defer { readHandle.closeFile() }
 
-    // Write modifications to a temporary file
-    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
-    FileManager.default.createFile(atPath: tempFile.path, contents: nil)
-    defer { try? FileManager.default.removeItem(at: tempFile) }
-
-    guard let writeHandle = FileHandle(forWritingAtPath: tempFile.path) else {
-        throw "Cannot open \(tempFile) for writing"
-    }
-    defer { writeHandle.closeFile() }
-
+    var result = ""
     for try await line in readHandle.bytes.lines {
-        var newLine = line
+        var line = line
         for symbol in symbols {
-            newLine = newLine.replacingOccurrences(of: symbol, with: "\(prefix)_\(symbol)", options: .literal)
+            line = line.replacingOccurrences(of: symbol, with: "\(prefix)_\(symbol)", options: .literal)
         }
-        writeHandle.write(Data(newLine.utf8))
-        writeHandle.write(Data("\n".utf8))
+        result += "\(line)\n"
     }
-
-    _ = try FileManager.default.replaceItemAt(url, withItemAt: tempFile)
+    
+    try result.write(to: url, atomically: true, encoding: .utf8)
 }
 
 /// Get the list of external symbols that we need to add our vendor prefix to. Uses ar and nm and does some
 /// sorting and filter on the symbol list to make prefixing easier later.
 func getSymbolsToPrefix() async throws -> [String] {
     // Make the CSQLite static library target available for easily getting the list of symbols
-    let package = try String(contentsOfFile: packageFile.path)
+    let package = try String(contentsOf: packageManifest)
     try package
         .split(separator: "\n")
         .filter { !$0.contains("/* VENDOR_START") && !$0.contains("VENDOR_END */") }
         .joined(separator: "\n")
-        .write(to: packageFile, atomically: true, encoding: .utf8)
-    defer { try? package.write(to: packageFile, atomically: true, encoding: .utf8) }
+        .write(to: packageManifest, atomically: true, encoding: .utf8)
+    defer { try? package.write(to: packageManifest, atomically: true, encoding: .utf8) }
 
     try await subprocess(swift, ["build", "--product", "CSQLite"], captureStdout: false)
-    guard let binPath = try await subprocess(swift, ["build", "--show-bin-path"], captureStdout: true) else {
-        throw "Cannot determine swift bin path"
+    guard let binPath = try await subprocess(swift, ["build", "--show-bin-path"]) else {
+        throw VendoringError("Cannot determine swift bin path")
     }
     let buildDirectory = URL(fileURLWithPath: binPath)
-    let library = buildDirectory.appendingPathComponent("libCSQLite.a")
+    let library = buildDirectory.appending(path: "libCSQLite.a")
 
     // Inspect the resulting library for object files
-    guard let objectFilenames = try await subprocess(ar, ["-t", library.path], captureStdout: true) else {
-        throw "Cannot determine object files from \(library.path)"
+    guard let objectFilenames = try await subprocess(ar, ["-t", library.path]) else {
+        throw VendoringError("Cannot determine object files from \(library.path)")
     }
     let objectFiles = objectFilenames
         .split(separator: "\n")
         .filter { $0.hasSuffix(".o") }
-        .map {
-            buildDirectory
-                .appendingPathComponent("CSQLite.build")
-                .appendingPathComponent(String($0))
-        }
+        .map { buildDirectory.appending(components: "CSQLite.build", $0) }
 
     // Get all external symbols
     var symbolsToRewrite = Set<String>()
     for objectFile in objectFiles {
-        guard let symbols = try await subprocess(nm, ["-gUP", objectFile.path], captureStdout: true) else {
+        guard let symbols = try await subprocess(nm, ["-gUP", objectFile.path]) else {
             continue
         }
         symbols.enumerateLines { (line, _) in
@@ -451,14 +427,13 @@ func applySQLitePatches() async throws {
         "-u",
         "-V", "none",
         "-i", root
-            .appendingPathComponent("scripts", isDirectory: true)
-            .appendingPathComponent("001-warnings-and-data-race.patch", isDirectory: false)
+            .appending(components: "scripts", "001-warnings-and-data-race.patch")
             .path,
     ], captureStdout: false)
 }
 
 @discardableResult
-func subprocess(_ executable: URL, _ arguments: [String], captureStdout: Bool) async throws -> String? {
+func subprocess(_ executable: URL, _ arguments: [String], captureStdout: Bool = true) async throws -> String? {
     let stdout = Pipe()
     let process = Process()
     process.executableURL = executable
@@ -469,12 +444,12 @@ func subprocess(_ executable: URL, _ arguments: [String], captureStdout: Bool) a
     try process.run()
     process.waitUntilExit()
     guard process.terminationStatus == 0 else {
-        throw "\(executable.path) failed: \(process.terminationStatus)"
+        throw VendoringError("\(executable.path) failed: \(process.terminationStatus)")
     }
     if captureStdout {
         var output = ""
-        for try await line in stdout.fileHandleForReading.bytes.characters {
-            output += String(line)
+        for try await line in stdout.fileHandleForReading.bytes.lines {
+            output += "\(line)\n"
         }
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
     } else {
@@ -484,10 +459,15 @@ func subprocess(_ executable: URL, _ arguments: [String], captureStdout: Bool) a
 
 func ensureExecutable(_ executable: String) async throws -> URL {
     let env = URL(fileURLWithPath: "/usr/bin/env")
-    guard let executablePath = try? await subprocess(env, ["which", executable], captureStdout: true) else {
-        throw "This script requires \(executable), verify your $PATH or install the executable and try again"
+    guard let executablePath = try? await subprocess(env, ["which", executable]) else {
+        throw VendoringError("This script requires \(executable), verify your $PATH or install the executable and try again")
     }
     return URL(fileURLWithPath: executablePath)
 }
 
-extension String: Error {}
+struct VendoringError: Error, ExpressibleByStringLiteral, CustomStringConvertible {
+    let description: String
+    
+    init(stringLiteral value: String) { self.description = value }
+    init(_ description: String) { self.description = description }
+}
