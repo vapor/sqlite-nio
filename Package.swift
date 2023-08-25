@@ -22,6 +22,30 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
+        .target(name: "CSQLite", cSettings: [
+            // Derived from sqlite3 version 3.43.0
+            .define("SQLITE_ENABLE_COLUMN_METADATA"),
+            .define("SQLITE_ENABLE_DBSTAT_VTAB"),
+            .define("SQLITE_ENABLE_FTS3"),
+            .define("SQLITE_ENABLE_FTS3_PARENTHESIS"),
+            .define("SQLITE_ENABLE_FTS3_TOKENIZER"),
+            .define("SQLITE_ENABLE_FTS4"),
+            .define("SQLITE_ENABLE_FTS5"),
+            .define("SQLITE_ENABLE_JSON1"),
+            .define("SQLITE_ENABLE_PREUPDATE_HOOK"),
+            .define("SQLITE_ENABLE_RTREE"),
+            .define("SQLITE_ENABLE_SESSION"),
+            .define("SQLITE_ENABLE_STMTVTAB"),
+            .define("SQLITE_ENABLE_UNKNOWN_SQL_FUNCTION"),
+            .define("SQLITE_ENABLE_UNLOCK_NOTIFY"),
+            .define("SQLITE_MAX_VARIABLE_NUMBER", to: "250000"),
+            .define("SQLITE_LIKE_DOESNT_MATCH_BLOBS"),
+            .define("SQLITE_OMIT_DEPRECATED"),
+            .define("SQLITE_OMIT_LOAD_EXTENSION"),
+            .define("SQLITE_SECURE_DELETE"),
+            .define("SQLITE_THREADSAFE", to: "2"),
+            .define("SQLITE_USE_URI"),
+        ]),
         .target(name: "SQLiteNIO", dependencies: [
             .target(name: "CSQLite"),
             .product(name: "Logging", package: "swift-log"),
@@ -29,58 +53,4 @@ let package = Package(
         ]),
         .testTarget(name: "SQLiteNIOTests", dependencies: ["SQLiteNIO"]),
     ]
-)
-
-var cSQLiteSettings: [CSetting] = [
-    // Derived from sqlite3 version 3.37.2 2022-01-06 13:25:41 872ba256cbf61d9290b571c0e6d82a20c224ca3ad82971edc46b29818d5dalt1
-    // compiled with gcc-11.3.0
-    // on platform Ubuntu 22.04.1 LTS (Jammy Jellyfish)
-    .define("SQLITE_ENABLE_COLUMN_METADATA"),
-    .define("SQLITE_ENABLE_DBSTAT_VTAB"),
-    .define("SQLITE_ENABLE_FTS3"),
-    .define("SQLITE_ENABLE_FTS3_PARENTHESIS"),
-    .define("SQLITE_ENABLE_FTS3_TOKENIZER"),
-    .define("SQLITE_ENABLE_FTS4"),
-    .define("SQLITE_ENABLE_FTS5"),
-    .define("SQLITE_ENABLE_JSON1"),
-    .define("SQLITE_ENABLE_PREUPDATE_HOOK"),
-    .define("SQLITE_ENABLE_RTREE"),
-    .define("SQLITE_ENABLE_SESSION"),
-    .define("SQLITE_ENABLE_STMTVTAB"),
-    .define("SQLITE_ENABLE_UNKNOWN_SQL_FUNCTION"),
-    .define("SQLITE_ENABLE_UNLOCK_NOTIFY"),
-    .define("SQLITE_ENABLE_UPDATE_DELETE_LIMIT"),
-    .define("SQLITE_HAVE_ISNAN"),
-    .define("SQLITE_LIKE_DOESNT_MATCH_BLOBS"),
-    .define("SQLITE_OMIT_LOAD_EXTENSION"),
-    .define("SQLITE_OMIT_LOOKASIDE"),
-    .define("SQLITE_SECURE_DELETE"),
-    .define("SQLITE_SYSTEM_MALLOC"),
-    .define("SQLITE_THREADSAFE", to: "2"),
-    .define("SQLITE_USE_URI"),
-
-    // Derived from sqlite3 version 3.37.0 2021-12-09 01:34:53 9ff244ce0739f8ee52a3e9671adb4ee54c83c640b02e3f9d185fd2f9a179aapl
-    // compiled with clang-13.1.6
-    // on platform macOS 12.6 (21G115)
-    .define("SQLITE_DEFAULT_CACHE_SIZE", to: "2000", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_JOURNAL_SIZE_LIMIT", to: "32768", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_LOOKASIDE", to: "1200,102", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_MEMSTATUS", to: "0", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_MMAP_SIZE", to: "0", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_PAGE_SIZE", to: "4096", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_PCACHE_INITSZ", to: "20", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_SYNCHRONOUS", to: "2", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_WAL_AUTOCHECKPOINT", to: "1000", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_WAL_SYNCHRONOUS", to: "1", .when(platforms: [.macOS])),
-    .define("SQLITE_DEFAULT_WORKER_THREADS", to: "0", .when(platforms: [.macOS])),
-    .define("SQLITE_ENABLE_LOCKING_STYLE", to: "1", .when(platforms: [.macOS])),
-    .define("SQLITE_MAX_MMAP_SIZE", to: "1073741824", .when(platforms: [.macOS])),
-]
-
-package.targets.append(
-    .target(
-        name: "CSQLite",
-        dependencies: [],
-        cSettings: cSQLiteSettings
-    )
 )
