@@ -1,13 +1,10 @@
-diff --git a/Sources/CSQLite/sqlitenio_sqlite3.c b/Sources/CSQLite/sqlitenio_sqlite3.c
-index 536e9b1..01a3eb8 100644
---- a/Sources/CSQLite/sqlitenio_sqlite3.c
-+++ b/Sources/CSQLite/sqlitenio_sqlite3.c
-@@ -1,3 +1,5 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -1,2 +1,4 @@
 +#pragma clang diagnostic ignored "-Wambiguous-macro"
 +#pragma clang diagnostic ignored "-Wshorten-64-to-32"
  /******************************************************************************
  ** This file is an amalgamation of many separate C source files from SQLite
- ** version 3.43.0.  By combining all the individual C code files into this
 @@ -165427,7 +165429,10 @@ SQLITE_API sqlite_int64 sqlite3_last_insert_rowid(sqlite3 *db){
      return 0;
    }

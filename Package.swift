@@ -11,17 +11,20 @@ let package = Package(
     ],
     products: [
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
-        // This target is only used to add our vendor prefix and is added and removed automatically.
-        // See: scripts/vendor-sqlite3.swift
-        /* VENDOR_START
-        .library(name: "CSQLite", type: .static, targets: ["CSQLite"]),
-        VENDOR_END */
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.42.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
+        .plugin(
+            name: "VendorSQLite",
+            capability: .command(
+                intent: .custom(verb: "vendor-sqlite", description: "Vendor SQLite"),
+                permissions: [/*.writeToPackageDirectory(reason: "Update the vendored SQLite files")*/]
+            ),
+            exclude: ["001-warnings-and-data-race.patch"]
+        ),
         .target(name: "CSQLite", cSettings: [
             // Derived from sqlite3 version 3.43.0
             .define("SQLITE_DQS", to: "0"),
