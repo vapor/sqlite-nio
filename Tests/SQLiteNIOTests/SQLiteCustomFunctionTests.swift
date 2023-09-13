@@ -354,8 +354,8 @@ class DatabaseFunctionTests: XCTestCase {
 	// MARK: - setup
 
 	var threadPool: NIOThreadPool!
-	var eventLoopGroup: EventLoopGroup!
-	var eventLoop: EventLoop {
+	var eventLoopGroup: (any EventLoopGroup)!
+	var eventLoop: any EventLoop {
 		return self.eventLoopGroup.any()
 	}
 

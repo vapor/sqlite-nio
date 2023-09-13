@@ -306,7 +306,7 @@ public final class SQLiteCustomFunction: Hashable {
         }
     }
 
-    private static func report(error: Error, in sqliteContext: OpaquePointer?) {
+    private static func report(error: any Swift.Error, in sqliteContext: OpaquePointer?) {
         if let error = error as? SQLiteError {
             sqlite_nio_sqlite3_result_error(sqliteContext, error.message, -1)
             sqlite_nio_sqlite3_result_error_code(sqliteContext, error.reason.statusCode)

@@ -95,7 +95,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
     }
 
     /// See `Encodable`.
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .integer(let value): try container.encode(value)
