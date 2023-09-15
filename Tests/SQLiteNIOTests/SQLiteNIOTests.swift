@@ -128,7 +128,7 @@ final class SQLiteNIOTests: XCTestCase {
 				sum = sum + (values.first?.integer ?? 0)
 			}
 
-			func finalize() throws -> SQLiteDataConvertible? {
+			func finalize() throws -> (any SQLiteDataConvertible)? {
 				sum
 			}
 		}
@@ -154,8 +154,8 @@ final class SQLiteNIOTests: XCTestCase {
 	}
 
     var threadPool: NIOThreadPool!
-    var eventLoopGroup: EventLoopGroup!
-    var eventLoop: EventLoop { return self.eventLoopGroup.any() }
+    var eventLoopGroup: (any EventLoopGroup)!
+    var eventLoop: any EventLoop { return self.eventLoopGroup.any() }
 
     override func setUpWithError() throws {
         self.threadPool = .init(numberOfThreads: 1)

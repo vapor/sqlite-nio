@@ -14,7 +14,7 @@ jobs:
 
   # Make sure downstream dependents still work
   dependents-check:
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ !(github.event.pull_request.draft || false) }}
     runs-on: ubuntu-latest
     container: swift:5.8-jammy
     steps:
@@ -22,10 +22,10 @@ jobs:
         uses: actions/checkout@v3
         with: { path: 'sqlite-nio' }
       - name: Check out SQLKit driver
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { repository: 'vapor/sqlite-kit', path: 'sqlite-kit' }
       - name: Check out FluentKit driver
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { repository: 'vapor/fluent-sqlite-driver', path: 'fluent-sqlite-driver' }
       - name: Tell dependents to use local checkout
         run: |
@@ -38,5 +38,3 @@ jobs:
 
   unit-tests:
     uses: vapor/ci/.github/workflows/run-unit-tests.yml@main
-    with:
-      with_coverage: true

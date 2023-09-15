@@ -315,7 +315,7 @@ class DatabaseFunctionTests: XCTestCase {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f") { _ in
-			throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message"])
+			throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message", NSLocalizedFailureReasonErrorKey: "custom error message"])
 		}
 
 		try conn.install(customFunction: fn).wait()
@@ -324,15 +324,10 @@ class DatabaseFunctionTests: XCTestCase {
 			_ = try conn.query("SELECT f()").wait()
 			XCTFail("Expected Error")
 		} catch let error as SQLiteError {
-
 			XCTAssertEqual(error.reason, .error)
 			XCTAssertTrue(error.message.contains("CustomErrorDomain"))
 			XCTAssertTrue(error.message.contains("123"))
-			#if os(Linux)
-			XCTAssertTrue(error.message.contains("(null)"), "expected '\(error.message)' to contain '(null)'")
-			#else
 			XCTAssertTrue(error.message.contains("custom error message"), "expected '\(error.message)' to contain 'custom error message'")
-			#endif
 		}
 	}
 
@@ -341,21 +336,25 @@ class DatabaseFunctionTests: XCTestCase {
 	func testFunctionsAreClosures() throws {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
-
-		var x = 123
+        
+        final class QuickBox<T: Sendable>: @unchecked Sendable {
+            var value: T
+            init(_ value: T) { self.value = value }
+        }
+		let x = QuickBox(123)
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			return x
+			x.value
 		}
 		try conn.install(customFunction: fn).wait()
-		x = 321
+		x.value = 321
 		XCTAssertEqual(321, try conn.query("SELECT f() as result").map({ rows in rows[0].column("result")?.integer }).wait())
 	}
 
 	// MARK: - setup
 
 	var threadPool: NIOThreadPool!
-	var eventLoopGroup: EventLoopGroup!
-	var eventLoop: EventLoop {
+	var eventLoopGroup: (any EventLoopGroup)!
+	var eventLoop: any EventLoop {
 		return self.eventLoopGroup.any()
 	}
 

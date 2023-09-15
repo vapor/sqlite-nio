@@ -18,18 +18,18 @@
         },
         "color": {
             "fill": {
-                "dark": "rgb(20, 20, 22)",
+                "dark": "rgb(0, 0, 0)",
                 "light": "rgb(255, 255, 255)"
             },
             "sqlite-teal": "hsl(215, 45%, 58%)",
-            "documentation-intro-fill": "radial-gradient(circle at top, var(--color-documentation-intro-accent) 30%, #1f1d1f 100%)",
+            "documentation-intro-fill": "radial-gradient(circle at top, var(--color-documentation-intro-accent) 30%, #000 100%)",
             "documentation-intro-accent": "var(--color-sqlite-teal)",
             "documentation-intro-accent-outer": {
                 "dark": "rgb(255, 255, 255)",
-                "light": "rgb(51, 51, 51)"
+                "light": "rgb(0, 0, 0)"
             },
             "documentation-intro-accent-inner": {
-                "dark": "rgb(51, 51, 51)",
+                "dark": "rgb(0, 0, 0)",
                 "light": "rgb(255, 255, 255)"
             }
         },

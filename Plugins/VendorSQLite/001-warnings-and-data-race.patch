@@ -1,0 +1,20 @@
+--- a/sqlite3.c
++++ b/sqlite3.c
+@@ -1,2 +1,4 @@
++#pragma clang diagnostic ignored "-Wambiguous-macro"
++#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ /******************************************************************************
+ ** This file is an amalgamation of many separate C source files from SQLite
+@@ -165427,7 +165429,10 @@ SQLITE_API sqlite_int64 sqlite3_last_insert_rowid(sqlite3 *db){
+     return 0;
+   }
+ #endif
+-  return db->lastRowid;
++  sqlite3_mutex_enter(db->mutex);
++  i64 lastRowId = db->lastRowid;
++  sqlite3_mutex_leave(db->mutex);
++  return lastRowId;
+ }
+ /*
+ ** Set the value returned by the sqlite_nio_sqlite3_last_insert_rowid() API function.
+
