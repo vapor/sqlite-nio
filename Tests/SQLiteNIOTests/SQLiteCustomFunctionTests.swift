@@ -342,16 +342,16 @@ class DatabaseFunctionTests: XCTestCase {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
         
-        final class UnsafeMutableTransfer<T>: @unchecked Sendable {
-            var wrappedValue: T
-            init(_ wrappedValue: T) { self.wrappedValue = wrappedValue }
+        final class QuickBox<T: Sendable>: @unchecked Sendable {
+            var value: T
+            init(_ value: T) { self.value = value }
         }
-		let x = UnsafeMutableTransfer(123)
+		let x = QuickBox(123)
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			x.wrappedValue
+			x.value
 		}
 		try conn.install(customFunction: fn).wait()
-		x.wrappedValue = 321
+		x.value = 321
 		XCTAssertEqual(321, try conn.query("SELECT f() as result").map({ rows in rows[0].column("result")?.integer }).wait())
 	}
 

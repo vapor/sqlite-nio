@@ -144,14 +144,6 @@ public final class SQLiteConnection: SQLiteDatabase {
         self.eventLoop = eventLoop
     }
     
-    private func runOnThreadPool<R>(_ closure: @Sendable @escaping (SQLiteConnection) throws -> R) -> EventLoopFuture<R> {
-        let transfer = UnsafeTransfer(self)
-        
-        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            try closure(transfer.wrappedValue)
-        }
-    }
-    
     public static func libraryVersion() -> Int32 {
         sqlite_nio_sqlite3_libversion_number()
     }
@@ -161,8 +153,8 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
     
     public func lastAutoincrementID() -> EventLoopFuture<Int> {
-        self.runOnThreadPool { _self in
-            let rowid = sqlite_nio_sqlite3_last_insert_rowid(_self.handle.raw)
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            let rowid = sqlite_nio_sqlite3_last_insert_rowid(self.handle.raw)
             return numericCast(rowid)
         }
     }
@@ -188,7 +180,6 @@ public final class SQLiteConnection: SQLiteDatabase {
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
         logger.debug("\(query) \(binds)")
-        let transfer = UnsafeTransfer(self)
         let promise = self.eventLoop.makePromise(of: Void.self)
         self.threadPool.submit {
             guard case $0 = NIOThreadPool.WorkItemState.active else {
@@ -198,7 +189,7 @@ public final class SQLiteConnection: SQLiteDatabase {
             }
             var futures: [EventLoopFuture<Void>] = []
             do {
-                let statement = try SQLiteStatement(query: query, on: transfer.wrappedValue)
+                let statement = try SQLiteStatement(query: query, on: self)
                 let columns = try statement.columns()
                 try statement.bind(binds)
                 while let row = try statement.nextRow(for: columns) {
@@ -213,23 +204,23 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
 
     public func close() -> EventLoopFuture<Void> {
-        self.runOnThreadPool { _self in
-            sqlite_nio_sqlite3_close(_self.handle.raw)
-            _self.handle.raw = nil
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            sqlite_nio_sqlite3_close(self.handle.raw)
+            self.handle.raw = nil
         }
     }
 
 	public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
 		logger.trace("Adding custom function \(customFunction.name)")
-		return self.runOnThreadPool { _self in
-            try customFunction.install(in: _self)
+		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            try customFunction.install(in: self)
 		}
 	}
 
 	public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
 		logger.trace("Removing custom function \(customFunction.name)")
-		return self.runOnThreadPool { _self in
-            try customFunction.uninstall(in: _self)
+		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            try customFunction.uninstall(in: self)
 		}
 	}
 
@@ -238,12 +229,7 @@ public final class SQLiteConnection: SQLiteDatabase {
     }
 }
 
-final class UnsafeMutableTransferBox<Wrapped>: @unchecked Sendable {
-    var wrappedValue: Wrapped
-    init(_ wrappedValue: Wrapped) { self.wrappedValue = wrappedValue }
-}
-
-struct UnsafeTransfer<Wrapped>: @unchecked Sendable {
+fileprivate final class UnsafeMutableTransferBox<Wrapped: Sendable>: @unchecked Sendable {
     var wrappedValue: Wrapped
     init(_ wrappedValue: Wrapped) { self.wrappedValue = wrappedValue }
 }
