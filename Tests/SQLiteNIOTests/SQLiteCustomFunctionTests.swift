@@ -315,7 +315,7 @@ class DatabaseFunctionTests: XCTestCase {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f") { _ in
-			throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message"])
+			throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message", NSLocalizedFailureReasonErrorKey: "custom error message"])
 		}
 
 		try conn.install(customFunction: fn).wait()
@@ -324,15 +324,10 @@ class DatabaseFunctionTests: XCTestCase {
 			_ = try conn.query("SELECT f()").wait()
 			XCTFail("Expected Error")
 		} catch let error as SQLiteError {
-
 			XCTAssertEqual(error.reason, .error)
 			XCTAssertTrue(error.message.contains("CustomErrorDomain"))
 			XCTAssertTrue(error.message.contains("123"))
-			#if os(Linux)
-			XCTAssertTrue(error.message.contains("(null)"), "expected '\(error.message)' to contain '(null)'")
-			#else
 			XCTAssertTrue(error.message.contains("custom error message"), "expected '\(error.message)' to contain 'custom error message'")
-			#endif
 		}
 	}
 
