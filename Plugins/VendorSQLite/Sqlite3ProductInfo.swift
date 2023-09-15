@@ -1,3 +1,5 @@
+#if canImport(Darwin)
+
 import struct Foundation.URL
 
 struct Sqlite3ProductInfo {
@@ -33,3 +35,5 @@ struct Sqlite3ProductInfo {
         self.sha3Hash = String(columns[4])
     }
 }
+
+#endif

@@ -1,3 +1,5 @@
+#if canImport(Darwin)
+
 struct SemanticVersion: LosslessStringConvertible, Comparable, Hashable {
     let major: Int
     let minor: Int
@@ -24,3 +26,5 @@ struct SemanticVersion: LosslessStringConvertible, Comparable, Hashable {
                lhs.patch != rhs.patch ? lhs.patch < rhs.patch : false))
     }
 }
+
+#endif

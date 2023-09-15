@@ -1,3 +1,5 @@
+#if canImport(Darwin)
+
 /// Exactly the same as SPM's builtin `ArgumentExtractor`, except it also (mostly) understands single-character short options.
 public struct UsefulArgumentExtractor {
     private var args: [String]
@@ -44,3 +46,5 @@ public struct UsefulArgumentExtractor {
     public var unextractedOptionsOrFlags: [String] { self.args.filter { $0.starts(with: "-") && $0 != "-" } }
     public var remainingArguments: [String] { self.args + self.literals }
 }
+
+#endif

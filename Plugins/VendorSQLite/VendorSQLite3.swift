@@ -1,6 +1,7 @@
 import Foundation
 import PackagePlugin
 
+#if canImport(Darwin)
 @main
 struct VendorSQLite: CommandPlugin {
     // Constants
@@ -240,6 +241,22 @@ struct VendorSQLite: CommandPlugin {
     }
 }
 
+extension Diagnostics {
+    static func verbose(_ message: String) {
+        // Diagnostics.remark() only shows up if SPM itself is in verbose mode, which is probably noisier than desired.
+        print("verbose: \(message)")
+    }
+}
+#else
+@main
+struct VendorSQLite: CommandPlugin {
+    func performCommand(context: PluginContext, arguments: [String]) async throws {
+        Diagnostics.error("This plugin is not implemented on non-Apple platforms.")
+        throw VendoringError("This plugin is not implemented on non-Apple platforms.")
+    }
+}
+#endif
+
 struct VendoringError: Error, ExpressibleByStringLiteral, CustomStringConvertible {
     let description: String
     
@@ -247,9 +264,3 @@ struct VendoringError: Error, ExpressibleByStringLiteral, CustomStringConvertibl
     init(_ description: String) { self.description = description }
 }
 
-extension Diagnostics {
-    static func verbose(_ message: String) {
-        // Diagnostics.remark() only shows up if SPM itself is in verbose mode, which is probably noisier than desired.
-        print("verbose: \(message)")
-    }
-}

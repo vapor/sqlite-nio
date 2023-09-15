@@ -1,3 +1,5 @@
+#if canImport(Darwin)
+
 import Foundation
 
 extension Foundation.Process {
@@ -29,3 +31,5 @@ extension Foundation.Process {
         return String(decoding: output, as: UTF8.self)
     }
 }
+
+#endif

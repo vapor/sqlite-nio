@@ -1,3 +1,5 @@
+#if canImport(Darwin)
+
 import Foundation
 
 struct AsyncNotOmittingEmptySubsequencesLineSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
@@ -45,3 +47,5 @@ struct AsyncNotOmittingEmptySubsequencesLineSequence<Base: AsyncSequence>: Async
 extension AsyncSequence where Self.Element == UInt8 {
     var keepingEmptySubsequencesLines: AsyncNotOmittingEmptySubsequencesLineSequence<Self> { .init(base: self) }
 }
+
+#endif
