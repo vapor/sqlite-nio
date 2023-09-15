@@ -7,7 +7,7 @@ internal struct SQLiteStatement {
 
     internal init(query: String, on connection: SQLiteConnection) throws {
         self.connection = connection
-        let ret = sqlite_nio_sqlite3_prepare_v2(connection.handle, query, -1, &self.handle, nil)
+        let ret = sqlite_nio_sqlite3_prepare_v2(connection.handle.raw, query, -1, &self.handle, nil)
         guard ret == SQLITE_OK else {
             throw SQLiteError(statusCode: ret, connection: connection)
         }

@@ -341,13 +341,17 @@ class DatabaseFunctionTests: XCTestCase {
 	func testFunctionsAreClosures() throws {
 		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
-
-		var x = 123
+        
+        final class UnsafeMutableTransfer<T>: @unchecked Sendable {
+            var wrappedValue: T
+            init(_ wrappedValue: T) { self.wrappedValue = wrappedValue }
+        }
+		let x = UnsafeMutableTransfer(123)
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			return x
+			x.wrappedValue
 		}
 		try conn.install(customFunction: fn).wait()
-		x = 321
+		x.wrappedValue = 321
 		XCTAssertEqual(321, try conn.query("SELECT f() as result").map({ rows in rows[0].column("result")?.integer }).wait())
 	}
 

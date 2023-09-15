@@ -38,7 +38,7 @@ public final class SQLiteCustomFunction: Hashable {
         _ name: String,
         argumentCount: Int32? = nil,
         pure: Bool = false,
-        function: @escaping ([SQLiteData]) throws -> (any SQLiteDataConvertible)?)
+        function: @Sendable @escaping ([SQLiteData]) throws -> (any SQLiteDataConvertible)?)
     {
         self.identity = Identity(name: name, nArg: argumentCount ?? -1)
         self.pure = pure
@@ -110,7 +110,7 @@ public final class SQLiteCustomFunction: Hashable {
         let definitionP = Unmanaged.passRetained(definition).toOpaque()
 
         let code = sqlite_nio_sqlite3_create_function_v2(
-            connection.handle,
+            connection.handle.raw,
             identity.name,
             identity.nArg,
             eTextRep,
@@ -132,7 +132,7 @@ public final class SQLiteCustomFunction: Hashable {
     /// See https://sqlite.org/c3ref/create_function.html
     func uninstall(in connection: SQLiteConnection) throws {
         let code = sqlite_nio_sqlite3_create_function_v2(
-            connection.handle,
+            connection.handle.raw,
             identity.name,
             identity.nArg,
             eTextRep,
@@ -148,7 +148,7 @@ public final class SQLiteCustomFunction: Hashable {
     /// http://sqlite.org/capi3ref.html#sqlite3_create_function
     private class FunctionDefinition {
         let compute: (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?
-        init(compute: @escaping (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?) {
+        init(compute: @Sendable @escaping (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?) {
             self.compute = compute
         }
     }
@@ -158,7 +158,7 @@ public final class SQLiteCustomFunction: Hashable {
     /// http://sqlite.org/capi3ref.html#sqlite3_create_function
     private class AggregateDefinition {
         let makeAggregate: () -> any SQLiteCustomAggregate
-        init(makeAggregate: @escaping () -> any SQLiteCustomAggregate) {
+        init(makeAggregate: @Sendable @escaping () -> any SQLiteCustomAggregate) {
             self.makeAggregate = makeAggregate
         }
     }
@@ -176,10 +176,10 @@ public final class SQLiteCustomFunction: Hashable {
     /// See http://sqlite.org/capi3ref.html#sqlite3_create_function
     private enum Kind {
         /// A regular function: `SELECT f(1)`
-        case function((Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?)
+        case function(@Sendable (Int32, UnsafeMutablePointer<OpaquePointer?>?) throws -> (any SQLiteDataConvertible)?)
 
         /// An aggregate: `SELECT f(foo) FROM bar GROUP BY baz`
-        case aggregate(() -> any SQLiteCustomAggregate)
+        case aggregate(@Sendable () -> any SQLiteCustomAggregate)
 
         /// Feeds the `pApp` parameter of `sqlite3_create_function_v2()`.
         /// http://sqlite.org/capi3ref.html#sqlite3_create_function
@@ -376,4 +376,4 @@ public protocol SQLiteCustomAggregate {
     func finalize() throws -> (any SQLiteDataConvertible)?
 }
 
-extension SQLiteCustomFunction: @unchecked Sendable {}
+extension SQLiteCustomFunction: Sendable {}
