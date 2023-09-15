@@ -19,7 +19,7 @@ struct AsyncNotOmittingEmptySubsequencesLineSequence<Base: AsyncSequence>: Async
                 defer { buf.removeAll(keepingCapacity: true) }
                 return buf.isEmpty ? nil : String(decoding: buf, as: UTF8.self)
             }
-            func nextByte() async throws -> UInt8? { defer { save = nil }; return if let save { save } else { try await src.next() } }
+            func nextByte() async throws -> UInt8? { defer { save = nil }; if let save { return save } else { return try await src.next() } }
             
             while let first = try await nextByte() {
                 switch first {
