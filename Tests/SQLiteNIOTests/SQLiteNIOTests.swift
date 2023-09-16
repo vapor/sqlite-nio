@@ -154,7 +154,9 @@ final class SQLiteNIOTests: XCTestCase {
 	}
 
     func testSingletonEventLoopOpen() async throws {
-        await XCTAssertNoThrowAsync(SQLiteConnection.open(storage: .memory))
+        var conn: SQLiteConnection! = nil
+        await XCTAssertNoThrowAsync(conn = try await SQLiteConnection.open(storage: .memory).get())
+        try await conn.close().get()
     }
 
     var threadPool: NIOThreadPool!
@@ -188,7 +190,9 @@ func env(_ name: String) -> String? {
 }
 
 func XCTAssertNoThrowAsync<T>(
-    _ expression: @autoclosure () async throws -> T, _ message: @autoclosure() -> String = "", file: StaticString = #filePath, line: UInt = #line
+    _ expression: @autoclosure () async throws -> T,
+    _ message: @autoclosure() -> String = "",
+    file: StaticString = #filePath, line: UInt = #line
 ) async {
     do {
         _ = try await expression()
