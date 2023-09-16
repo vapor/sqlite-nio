@@ -230,7 +230,7 @@ public final class SQLiteConnection: SQLiteDatabase {
 }
 
 extension SQLiteConnection {
-    static func open(
+    public static func open(
         storage: Storage = .memory,
         logger: Logger = .init(label: "codes.vapor.sqlite")
     ) -> EventLoopFuture<SQLiteConnection> {

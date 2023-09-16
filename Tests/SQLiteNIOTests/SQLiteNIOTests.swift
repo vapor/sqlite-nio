@@ -153,6 +153,10 @@ final class SQLiteNIOTests: XCTestCase {
 		XCTAssertEqual(rows.first?.column("my_value")?.integer, 6)
 	}
 
+    func testSingletonEventLoopOpen() async throws {
+        await XCTAssertNoThrowAsync(SQLiteConnection.open(storage: .memory))
+    }
+
     var threadPool: NIOThreadPool!
     var eventLoopGroup: (any EventLoopGroup)!
     var eventLoop: any EventLoop { return self.eventLoopGroup.any() }
@@ -181,4 +185,15 @@ let isLoggingConfigured: Bool = {
 
 func env(_ name: String) -> String? {
     ProcessInfo.processInfo.environment[name]
+}
+
+func XCTAssertNoThrowAsync<T>(
+    _ expression: @autoclosure () async throws -> T, _ message: @autoclosure() -> String = "", file: StaticString = #filePath, line: UInt = #line
+) async {
+    do {
+        _ = try await expression()
+    } catch {
+        let msg = message()
+        XCTFail("Expression did throw error\(msg.isEmpty ? "" : ": \(msg)"))", file: file, line: line)
+    }
 }
