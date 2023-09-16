@@ -282,3 +282,17 @@ public final class SQLiteConnection: SQLiteDatabase {
         assert(self.handle == nil, "SQLiteConnection was not closed before deinitializing")
     }
 }
+
+extension SQLiteConnection {
+    static func open(
+        storage: Storage = .memory,
+        logger: Logger = .init(label: "codes.vapor.sqlite")
+    ) -> EventLoopFuture<SQLiteConnection> {
+        Self.open(
+            storage: storage,
+            threadPool: NIOThreadPool.singleton,
+            logger: logger,
+            on: MultiThreadedEventLoopGroup.singleton.any()
+        )
+    }
+}
