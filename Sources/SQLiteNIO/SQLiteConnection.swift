@@ -100,6 +100,18 @@ public final class SQLiteConnection: SQLiteDatabase {
 
     public static func open(
         storage: Storage = .memory,
+        logger: Logger = .init(label: "codes.vapor.sqlite")
+    ) -> EventLoopFuture<SQLiteConnection> {
+        Self.open(
+            storage: storage,
+            threadPool: NIOThreadPool.singleton,
+            logger: logger,
+            on: MultiThreadedEventLoopGroup.singleton.any()
+        )
+    }
+
+    public static func open(
+        storage: Storage = .memory,
         threadPool: NIOThreadPool,
         logger: Logger = .init(label: "codes.vapor.sqlite"),
         on eventLoop: any EventLoop

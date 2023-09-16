@@ -13,7 +13,7 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.42.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.58.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
