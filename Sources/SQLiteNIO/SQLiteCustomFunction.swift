@@ -89,8 +89,8 @@ public final class SQLiteCustomFunction: Hashable {
     ///   - aggregate: A type that implements the ``SQLiteCustomAggregate`` protocol.
     ///     For each step of the aggregation, its ``SQLiteCustomAggregate/step(_:)``
     ///     method is called with an array of DatabaseValue arguments. The array
-    ///     is guaranteed to have exactly ``argumentCount`` elements, provided
-    ///     ``argumentCount`` is not nil.
+    ///     is guaranteed to have exactly `argumentCount` elements, provided
+    ///     `argumentCount` is not nil.
     public init<Aggregate: SQLiteCustomAggregate>(
         _ name: String,
         argumentCount: Int32? = nil,
@@ -317,13 +317,12 @@ public final class SQLiteCustomFunction: Hashable {
 }
 
 extension SQLiteCustomFunction {
-    /// See ``Hashable/has(into:)``.
+    // See `Hashable.hash(into:)`.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(identity)
     }
 
     /// Two functions are equal if they share the same name and arity.
-    /// See ``Equatable/==(lhs:rhs:)``.
     public static func == (lhs: SQLiteCustomFunction, rhs: SQLiteCustomFunction) -> Bool {
         lhs.identity == rhs.identity
     }
