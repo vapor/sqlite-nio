@@ -1,58 +1,21 @@
 <svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" id="technology">
-  <style>
-    @media (prefers-color-scheme: light) {
-      :root, body[data-color-scheme="auto"], body[data-color-scheme="light"] {
-        --color-documentation-intro-accent-outer: #000;
-        --color-documentation-intro-accent-inner: #fff;
-      }
-      body[data-color-scheme="dark"] {
-        --color-documentation-intro-accent-outer: #fff;
-        --color-documentation-intro-accent-inner: #000;
-      }
-    }
-    @media (prefers-color-scheme: dark) {
-      :root, body[data-color-scheme="auto"], body[data-color-scheme="dark"] {
-        --color-documentation-intro-accent-outer: #fff;
-        --color-documentation-intro-accent-inner: #000;
-      }
-      body[data-color-scheme="light"] {
-        --color-documentation-intro-accent-outer: #000;
-        --color-documentation-intro-accent-inner: #fff;
-      }
-    }
-  </style>
-  <title>SQLiteNIO</title>
   <defs>
-    <path id="diam"  d="M 0,0 l 55.5,-47 58.5,47 -57, 45 z" />
-    <path id="seg"   d="M 0,0 l  0.0, 12 57.0,45   0,-12 z" />
-    <path id="shape" d="M 96,47
-                        c -.32.44-.58.92-.94,1.41-4.77,6.66-9.53,13.31-14.94,19.71-1.89
-                          2.29-3.94,4.45-6.31,6.44-.63.52-1.37.97-2.11,1.41-.89.48-1.48
-                          .18-1.48.18.0.0.0.0-.1-.1-.1.0-.1.0-.11-.1-5.75-5.76-10.06
-                          -12.18-13.32-19.12-2.72-5.72-4.64-11.57-5.34-17.73-.41-3.65-.34
-                          -7.26.63-10.83.0.0.0-.1.0-.1.0-.1.0-.22-.16-.22-.41,1.23-.88
-                          2.42-1.18,3.66-1.74,6.78-1.24,13.47.74,20.16,1.65,5.27,4.41
-                          10.33,7.75,15.08.38.83-.2.7-.52.53-3.53-1.4-6.57-3.29-9.04
-                          -5.75-8.8-8.52-10.55-18.25-6.73-28.73.83-2.2,1.92-4.36,3.23
-                          -6.35,2.14-3.39,5.51-6.57,7.35-8.2.47-.39,1.17-.26,1.28.26.55
-                          2.12,2.76,5.24,2.71,5.28.7,1.19,1.78,2.42,2.69,3.6.1.14.27.31
-                          .33.44,1.67,2.24-2.2,8.86-2.2,8.86
-                        l 5.21-4.9
-                        c 1.03,1.45,1.89,2.94,2.59,4.22.1.0.1.0.1.13.0.0.11.18.11.26
-                          2.82,5.46,3.18,9.33,3.18,9.68.57,3.61.39,7.22-.36,10.87-.56
-                          2.69-1.44,5.38-2.15,8.02.0.22-.11.35.0.48.0.14.0.22.11.36
-                        l 3.44,9.01,3.89-3.97c8.1-7.41,14.76-15.83,21.69-24.03z" />
+  <style>
+    @media(prefers-color-scheme:dark){:root{--color-logo-shape:#000;--color-logo-base:#fff;}}
+    body[data-color-scheme="dark"]{--color-logo-shape:#000;--color-logo-base:#fff;}
+  </style>
+  <path id="d" d="m6,47l58-47,58,47-58,45z"/>
+  <path id="s" d="m6,47v12l58,45v-12z"/>
+  <path id="h" d="M96,47c-.32.44-.58.92-.94,1.41-4.77,6.66-9.53,13.31-14.94,19.71-1.89,2.29-3.94,4.45-6.31,6.44-.63.52-1.37.97-2.11,1.41-.89.48-1.48.18-1.48.18.0.0.0.0-.1-.1-.1.0-.1.0-.11-.1-5.75-5.76-10.06-12.18-13.32-19.12-2.72-5.72-4.64-11.57-5.34-17.73-.41-3.65-.34-7.26.63-10.83.0.0.0-.1.0-.1.0-.1.0-.22-.16-.22-.41,1.23-.88,2.42-1.18,3.66-1.74,6.78-1.24,13.47.74,20.16,1.65,5.27,4.41,10.33,7.75,15.08.38.83-.2.7-.52.53-3.53-1.4-6.57-3.29-9.04-5.75-8.8-8.52-10.55-18.25-6.73-28.73.83-2.2,1.92-4.36,3.23-6.35,2.14-3.39,5.51-6.57,7.35-8.2.47-.39,1.17-.26,1.28.26.55,2.12,2.76,5.24,2.71,5.28.7,1.19,1.78,2.42,2.69,3.6.1.14.27.31.33.44,1.67,2.24-2.2,8.86-2.2,8.86l5.21-4.9c1.03,1.45,1.89,2.94,2.59,4.22.1.0.1.0.1.13.0.0.11.18.11.26,2.82,5.46,3.18,9.33,3.18,9.68.57,3.61.39,7.22-.36,10.87-.56,2.69-1.44,5.38-2.15,8.02.0.22-.11.35.0.48.0.14.0.22.11.36l3.44,9.01,3.89-3.97c8.1-7.41,14.76-15.83,21.69-24.03z"/>
   </defs>
-  <g transform="translate(7 47)">
-    <use href="#seg" transform="translate(0  0)" fill="hsl(199, 99%, 61%)" />
-    <use href="#seg" transform="translate(0 12)" fill="hsl(199, 99%, 71%)" />
-    <use href="#seg" transform="translate(0 24)" fill="hsl(199, 99%, 81%)" />
-    <g transform="translate(114 0) scale(-1 1)">
-      <use href="#seg" transform="translate(0  0)" fill="hsl(292, 96%, 61%)" />
-      <use href="#seg" transform="translate(0 12)" fill="hsl(292, 96%, 71%)" />
-      <use href="#seg" transform="translate(0 24)" fill="hsl(292, 96%, 81%)" />
-    </g>
-    <use href="#diam" style="fill: var(--color-documentation-intro-accent-outer);" />
+  <use href="#s" fill="#9ee0ff"/>
+  <use href="#s" fill="#6bd0ff" y="12"/>
+  <use href="#s" fill="#38c0ff" y="24"/>
+  <g transform="matrix(-1 0 0 1 128 0)">
+    <use href="#s" fill="#f29eff"/>
+    <use href="#s" fill="#eb6bff" y="12"/>
+    <use href="#s" fill="#e438ff" y="24"/>
   </g>
-  <use href="#shape" style="fill: var(--color-documentation-intro-accent-inner);" />
+  <use href="#d" style="fill:var(--color-logo-base,#000)"/>
+  <use href="#h" style="fill:var(--color-logo-shape,#fff);"/>
 </svg>
