@@ -12,7 +12,7 @@
       "logo-shape": { "dark": "#000", "light": "#fff" },
       "fill":       { "dark": "#000", "light": "#fff" }
     },
-    "icons": { "technology": "/sqlitenio/images/vapor-sqlite-logo.svg" }
+    "icons": { "technology": "/sqlitenio/images/vapor-sqlitenio-logo.svg" }
   },
   "features": {
     "quickNavigation": { "enable": true },
