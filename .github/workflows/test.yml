@@ -16,10 +16,10 @@ jobs:
   dependents-check:
     if: ${{ !(github.event.pull_request.draft || false) }}
     runs-on: ubuntu-latest
-    container: swift:5.8-jammy
+    container: swift:5.9-jammy
     steps:
       - name: Check out package
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with: { path: 'sqlite-nio' }
       - name: Check out SQLKit driver
         uses: actions/checkout@v4

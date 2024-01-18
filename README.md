@@ -1,17 +1,19 @@
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/1130717/268050010-4fe2d383-61b0-4ae6-9fd4-d795492686f6.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://user-images.githubusercontent.com/1130717/268049911-75f4e82e-6ccb-4f81-874f-95a57eef2935.png">
-  <img src="https://user-images.githubusercontent.com/1130717/268049911-75f4e82e-6ccb-4f81-874f-95a57eef2935.png" height="96" alt="SQLiteNIO">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/vapor/sqlite-nio/assets/1130717/84529505-7534-456f-a065-c06cc84f3c0d">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/vapor/sqlite-nio/assets/1130717/a839372c-5f79-4e59-8cf7-db44af8f20a9">
+  <img src="https://github.com/vapor/sqlite-nio/assets/1130717/a839372c-5f79-4e59-8cf7-db44af8f20a9" height="96" alt="SQLiteNIO">
 </picture> 
 <br>
 <br>
-<a name=""><img src="https://img.shields.io/badge/sswg-incubating-green.svg" alt="SSWG Incubation"></a>
-<a href="https://api.vapor.codes/sqlitenio/documentation/sqlitenio/"><img src="https://img.shields.io/badge/read_the-docs-2196f3.svg" alt="Documentation"></a>
-<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT License"></a>
-<a href="https://github.com/vapor/sqlite-nio/actions/workflows/test.yml"><img src="https://github.com/vapor/sqlite-nio/actions/workflows/test.yml/badge.svg" alt="Continuous Integration"></a>
-<a href="https://swift.org"><img src="https://img.shields.io/badge/swift-5.7-brightgreen.svg" alt="Swift 5.7"></a>
+<a href="https://docs.vapor.codes/4.0/"><img src="https://design.vapor.codes/images/readthedocs.svg" alt="Documentation"></a>
+<a href="https://discord.gg/vapor"><img src="https://design.vapor.codes/images/discordchat.svg" alt="Team Chat"></a>
+<a href="LICENSE"><img src="https://design.vapor.codes/images/mitlicense.svg" alt="MIT License"></a>
+<a href="https://github.com/vapor/sqlite-nio/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/vapor/sqlite-nio/test.yml?event=push&style=plastic&logo=github&label=test&logoColor=%23ccc" alt="Continuous Integration"></a>
+<a href="https://codecov.io/github/vapor/sqlite-nio"><img src="https://img.shields.io/codecov/c/github/vapor/sqlite-nio?style=plastic&logo=codecov&label=Codecov"></a>
+<a href="https://swift.org"><img src="https://design.vapor.codes/images/swift57up.svg" alt="Swift 5.7+"></a>
 </p>
+
 <br>
 
 🐬 Non-blocking, event-driven Swift client for [SQLite](https://sqlite.org) built on [SwiftNIO](https://github.com/apple/swift-nio).

@@ -29,12 +29,11 @@ private struct CustomValueType: SQLiteDataConvertible, Equatable {
 	}
 }
 
-class DatabaseFunctionTests: XCTestCase {
-
+final class DatabaseFunctionTests: XCTestCase {
 	// MARK: - Return values
 
 	func testFunctionReturningNull() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
@@ -46,7 +45,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionReturningInt64() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
@@ -57,7 +56,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionReturningDouble() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
 			return 1e100
@@ -67,7 +66,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionReturningString() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in
 			return "foo"
@@ -77,7 +76,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionReturningData() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in
 			return "foo".data(using: .utf8)
@@ -92,7 +91,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionReturningCustomValueType() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
 			return CustomValueType()
@@ -104,7 +103,7 @@ class DatabaseFunctionTests: XCTestCase {
 	// MARK: - Argument values
 
 	func testFunctionArgumentNil() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
 			return values[0].isNull
@@ -124,7 +123,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionArgumentInt64() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
 			return values[0].integer
@@ -139,7 +138,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionArgumentDouble() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
 			return values[0].double
@@ -154,7 +153,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionArgumentString() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
 			return values[0].string
@@ -167,7 +166,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionArgumentBlob() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
 			return values[0].blob
@@ -185,7 +184,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionArgumentCustomValueType() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
 			return CustomValueType(sqliteData: values[0])
@@ -200,7 +199,7 @@ class DatabaseFunctionTests: XCTestCase {
 	// MARK: - Argument count
 
 	func testFunctionWithoutArgument() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 0) { (values: [SQLiteData]) in
 			return "foo"
@@ -218,7 +217,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionOfOneArgument() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
 			return values.first?.string?.uppercased()
@@ -242,7 +241,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionOfTwoArguments() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
 		let fn = SQLiteCustomFunction("f", argumentCount: 2) { (values: [SQLiteData]) in
@@ -264,7 +263,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testVariadicFunction() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
 		let fn = SQLiteCustomFunction("f") { (values: [SQLiteData]) in
@@ -285,7 +284,7 @@ class DatabaseFunctionTests: XCTestCase {
 	// MARK: - Errors
 
 	func testFunctionThrowingDatabaseCustomErrorWithMessage() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
 		struct MyError: Error {
@@ -312,7 +311,7 @@ class DatabaseFunctionTests: XCTestCase {
 	}
 
 	func testFunctionThrowingNSError() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 		let fn = SQLiteCustomFunction("f") { _ in
 			throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message", NSLocalizedFailureReasonErrorKey: "custom error message"])
@@ -334,7 +333,7 @@ class DatabaseFunctionTests: XCTestCase {
 	// MARK: - Misc
 
 	func testFunctionsAreClosures() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
         
         final class QuickBox<T: Sendable>: @unchecked Sendable {
@@ -352,20 +351,9 @@ class DatabaseFunctionTests: XCTestCase {
 
 	// MARK: - setup
 
-	var threadPool: NIOThreadPool!
-	var eventLoopGroup: (any EventLoopGroup)!
-	var eventLoop: any EventLoop {
-		return self.eventLoopGroup.any()
-	}
+	var eventLoop: any EventLoop { MultiThreadedEventLoopGroup.singleton.any() }
 
-	override func setUp() {
-		self.threadPool = .init(numberOfThreads: 1)
-		self.threadPool.start()
-		self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-	}
-
-	override func tearDown() {
-		try! self.threadPool.syncShutdownGracefully()
-		try! self.eventLoopGroup.syncShutdownGracefully()
-	}
+    override func setUpWithError() throws {
+        XCTAssert(isLoggingConfigured)
+    }
 }

@@ -6,7 +6,7 @@ import NIOPosix
 
 final class SQLiteNIOTests: XCTestCase {
     func testBasicConnection() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
 
         let rows = try conn.query("SELECT sqlite_version()").wait()
@@ -23,7 +23,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
 
     func testZeroLengthBlob() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
 
         let rows = try conn.query("SELECT zeroblob(0) as zblob").wait()
@@ -31,7 +31,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
 
     func testDateFormat() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
         
         XCTAssertEqual(Date(sqliteData: .text("2023-03-10"))?.timeIntervalSince1970, 1678406400)
@@ -41,7 +41,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
     
     func testDateTimeFormat() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
         
         XCTAssertEqual(Date(sqliteData: .text("2023-03-10 23:54:27"))?.timeIntervalSince1970, 1678492467)
@@ -51,7 +51,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
     
     func testTimestampStorage() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
 
         let date = Date()
@@ -63,7 +63,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
 
     func testTimestampStorageRoundToMicroseconds() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
 
         // Test value that when read back out of sqlite results in 7 decimal places that we need to round to microseconds
@@ -86,7 +86,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
 
     func testTimestampStorageInDateColumnIntegralValue() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
 
         let date = Date(timeIntervalSince1970: 42)
@@ -100,7 +100,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
 
     func testDuplicateColumnName() throws {
-        let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+        let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
         defer { try! conn.close().wait() }
 
         let rows = try conn.query("SELECT 1 as foo, 2 as foo").wait()
@@ -116,7 +116,7 @@ final class SQLiteNIOTests: XCTestCase {
     }
 
 	func testCustomAggregate() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
 		_ = try conn.query(#"CREATE TABLE "scores" ("score" INTEGER NOT NULL);"#).wait()
@@ -141,7 +141,7 @@ final class SQLiteNIOTests: XCTestCase {
 	}
 
 	func testDatabaseFunction() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: self.threadPool, on: self.eventLoop).wait()
+		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
 		defer { try! conn.close().wait() }
 
 		let function = SQLiteCustomFunction("my_custom_function", argumentCount: 1, pure: true) { args in
@@ -159,20 +159,10 @@ final class SQLiteNIOTests: XCTestCase {
         try await conn.close().get()
     }
 
-    var threadPool: NIOThreadPool!
-    var eventLoopGroup: (any EventLoopGroup)!
-    var eventLoop: any EventLoop { return self.eventLoopGroup.any() }
+    var eventLoop: any EventLoop { MultiThreadedEventLoopGroup.singleton.any() }
 
     override func setUpWithError() throws {
-        self.threadPool = .init(numberOfThreads: 1)
-        self.threadPool.start()
-        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         XCTAssert(isLoggingConfigured)
-    }
-    
-    override func tearDownWithError() throws {
-        try self.threadPool.syncShutdownGracefully()
-        try self.eventLoopGroup.syncShutdownGracefully()
     }
 }
 
@@ -191,13 +181,12 @@ func env(_ name: String) -> String? {
 
 func XCTAssertNoThrowAsync<T>(
     _ expression: @autoclosure () async throws -> T,
-    _ message: @autoclosure() -> String = "",
+    _ message: @autoclosure () -> String = "",
     file: StaticString = #filePath, line: UInt = #line
 ) async {
     do {
         _ = try await expression()
     } catch {
-        let msg = message()
-        XCTFail("Expression did throw error\(msg.isEmpty ? "" : ": \(msg)"))", file: file, line: line)
+        XCTAssertNoThrow(try { throw error }(), message(), file: file, line: line)
     }
 }
