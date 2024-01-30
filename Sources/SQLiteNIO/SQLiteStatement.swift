@@ -83,7 +83,6 @@ internal struct SQLiteStatement {
             throw SQLiteError(statusCode: step, connection: connection)
         }
 
-
         let count = sqlite_nio_sqlite3_column_count(self.handle)
         var row: [SQLiteData] = []
         for i in 0..<count {
