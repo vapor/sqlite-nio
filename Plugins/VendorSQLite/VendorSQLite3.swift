@@ -225,9 +225,13 @@ struct VendorSQLite: CommandPlugin {
             let writer = try FileHandle(forWritingTo: outputFile.fileUrl)
             defer { try? writer.close() }
             
-            Diagnostics.verbose("Prefixing symbols in \(file.lastComponent)...")
+            let minimalCommonPrefix = symbols.reduce(symbols[0]) { $1.commonPrefix(with: $0, options: .literal)[...] }
+            
+            Diagnostics.verbose("Prefixing symbols in \(file.lastComponent) (minimum prefix \(minimalCommonPrefix))...")
             for try await line in reader.bytes.keepingEmptySubsequencesLines {
-                let oline = line.isEmpty ? "" : symbols.reduce(line, { $0.replacingOccurrences(of: $1, with: "\(Self.vendorPrefix)_\($1)") })
+                let oline = line.contains(minimalCommonPrefix) ?
+                    symbols.reduce(line, { $0.replacingOccurrences(of: $1, with: "\(Self.vendorPrefix)_\($1)") }) :
+                    line
                 
                 try writer.write(contentsOf: Array("\(oline)\n".utf8))
             }
