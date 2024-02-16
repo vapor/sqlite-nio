@@ -1,2 +1,2 @@
-// This directory is generated from SQLite sources downloaded from https://sqlite.org/2024/sqlite-amalgamation-3450000.zip
-3.45.0
+// This directory is generated from SQLite sources downloaded from https://sqlite.org/2024/sqlite-amalgamation-3450100.zip
+3.45.1

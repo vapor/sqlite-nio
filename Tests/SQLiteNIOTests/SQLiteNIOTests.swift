@@ -10,9 +10,8 @@ final class SQLiteNIOTests: XCTestCase {
         defer { try! conn.close().wait() }
 
         let rows = try conn.query("SELECT sqlite_version()").wait()
-        print(rows)
-        let compileOptions = try conn.query("PRAGMA compile_options;").wait()
-        print(compileOptions)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertNoThrow(try conn.query("PRAGMA compile_options").wait())
     }
     
     func testConnectionClosedThreadPool() throws {
@@ -27,7 +26,8 @@ final class SQLiteNIOTests: XCTestCase {
         defer { try! conn.close().wait() }
 
         let rows = try conn.query("SELECT zeroblob(0) as zblob").wait()
-        print(rows)
+        
+        XCTAssertEqual(rows.count, 1)
     }
 
     func testDateFormat() throws {
