@@ -1,4 +1,4 @@
-public struct SQLiteColumn: CustomStringConvertible {
+public struct SQLiteColumn: CustomStringConvertible, Sendable {
     public let name: String
     public let data: SQLiteData
 
@@ -7,7 +7,7 @@ public struct SQLiteColumn: CustomStringConvertible {
     }
 }
 
-public struct SQLiteRow {
+public struct SQLiteRow: CustomStringConvertible, Sendable {
     let columnOffsets: SQLiteColumnOffsets
     let data: [SQLiteData]
 
@@ -23,23 +23,18 @@ public struct SQLiteRow {
         }
         return self.data[offset]
     }
-}
 
-extension SQLiteRow: CustomStringConvertible {
     public var description: String {
         self.columns.description
     }
 }
 
-final class SQLiteColumnOffsets {
+struct SQLiteColumnOffsets: Sendable {
     let offsets: [(String, Int)]
     let lookupTable: [String: Int]
 
     init(offsets: [(String, Int)]) {
         self.offsets = offsets
-        self.lookupTable = .init(offsets, uniquingKeysWith: { a, b in a })
+        self.lookupTable = .init(offsets, uniquingKeysWith: { a, _ in a })
     }
 }
-
-extension SQLiteRow: Sendable {}
-extension SQLiteColumnOffsets: Sendable {}
