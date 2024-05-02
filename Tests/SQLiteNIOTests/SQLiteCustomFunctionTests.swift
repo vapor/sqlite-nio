@@ -14,6 +14,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 */
 import XCTest
 import SQLiteNIO
+import NIOFoundationCompat
 
 private struct CustomValueType: SQLiteDataConvertible, Equatable {
 	init() {}
@@ -32,328 +33,236 @@ private struct CustomValueType: SQLiteDataConvertible, Equatable {
 final class DatabaseFunctionTests: XCTestCase {
 	// MARK: - Return values
 
-	func testFunctionReturningNull() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
+	func testFunctionReturningNull() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in nil }
+            try await conn.install(customFunction: fn)
 
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			return nil
-		}
-		try conn.install(customFunction: fn).wait()
-
-		XCTAssertTrue(try conn.query("SELECT f() as result").map { rows in rows[0].column("result")!.isNull }.wait())
+            await XCTAssertAsync(try await conn.query("SELECT f() as result").first?.column("result")?.isNull ?? false)
+        }
 	}
 
-	func testFunctionReturningInt64() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			return Int(1)
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertEqual(Int(1), try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.integer }.wait())
+	func testFunctionReturningInt64() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in 1 }
+            try await conn.install(customFunction: fn)
+            await XCTAssertEqualAsync(Int(1), try await conn.query("SELECT f() as result").first?.column("result")?.integer)
+        }
 	}
 
-	func testFunctionReturningDouble() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			return 1e100
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertEqual(1e100, try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.double }.wait())
+	func testFunctionReturningDouble() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in 1e100 }
+            
+            try await conn.install(customFunction: fn)
+            await XCTAssertEqualAsync(1e100, try await conn.query("SELECT f() as result").first?.column("result")?.double)
+        }
 	}
 
-	func testFunctionReturningString() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in
-			return "foo"
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertEqual("foo", try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.string }.wait())
+	func testFunctionReturningString() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in "foo" }
+            
+            try await conn.install(customFunction: fn)
+            await XCTAssertEqualAsync("foo", try await conn.query("SELECT f() as result").first?.column("result")?.string)
+        }
 	}
 
-	func testFunctionReturningData() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in
-			return "foo".data(using: .utf8)
-		}
-		try conn.install(customFunction: fn).wait()
+	func testFunctionReturningData() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in Data("foo".utf8) }
+            try await conn.install(customFunction: fn)
 
-		XCTAssertEqual("foo".data(using: .utf8)!.sqliteData!.blob!,
-									 try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.blob }.wait())
-
-		XCTAssertNotEqual("bar".data(using: .utf8)!.sqliteData!.blob!,
-									 try conn.query("SELECT f() as result").map { rows in rows[0].column("result")?.blob }.wait())
+            await XCTAssertEqualAsync(ByteBuffer(string: "foo"), try await conn.query("SELECT f() as result").first?.column("result")?.blob)
+            await XCTAssertNotEqualAsync(ByteBuffer(string: "bar"), try await conn.query("SELECT f() as result").first?.column("result")?.blob)
+        }
 	}
 
-	func testFunctionReturningCustomValueType() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			return CustomValueType()
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertEqual(CustomValueType().sqliteData, try conn.query("SELECT f() as result").map { rows in rows[0].column("result") }.wait())
+	func testFunctionReturningCustomValueType() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in CustomValueType() }
+            
+            try await conn.install(customFunction: fn)
+            await XCTAssertEqualAsync(CustomValueType().sqliteData, try await conn.query("SELECT f() as result").first?.column("result"))
+        }
 	}
 
 	// MARK: - Argument values
 
-	func testFunctionArgumentNil() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-			return values[0].isNull
-		}
-		try conn.install(customFunction: fn).wait()
+	func testFunctionArgumentNil() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 1) { values in values[0].isNull }
+            try await conn.install(customFunction: fn)
 
-		XCTAssertTrue(try conn.query("SELECT f(NULL) as result")
-										.map { rows in rows[0].column("result")!.bool! }.wait())
-		XCTAssertFalse(try conn.query("SELECT f(1) as result")
-										.map { rows in rows[0].column("result")!.bool! }.wait())
-		XCTAssertFalse(try conn.query("SELECT f(1.1) as result")
-										.map { rows in rows[0].column("result")!.bool! }.wait())
-		XCTAssertFalse(try conn.query("SELECT f('foo') as result")
-										.map { rows in rows[0].column("result")!.bool! }.wait())
-		XCTAssertFalse(try conn.query("SELECT f(?) as result", [.text("foo")])
-										.map { rows in rows[0].column("result")!.bool! }.wait())
+            await XCTAssertTrueAsync(try await conn.query("SELECT f(NULL) as result").first?.column("result")?.bool ?? false)
+            await XCTAssertFalseAsync(try await conn.query("SELECT f(1) as result").first?.column("result")?.bool ?? true)
+            await XCTAssertFalseAsync(try await conn.query("SELECT f(1.1) as result").first?.column("result")?.bool ?? true)
+            await XCTAssertFalseAsync(try await conn.query("SELECT f('foo') as result").first?.column("result")?.bool ?? true)
+            await XCTAssertFalseAsync(try await conn.query("SELECT f(?) as result", [.text("foo")]).first?.column("result")?.bool ?? true)
+        }
 	}
 
-	func testFunctionArgumentInt64() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-			return values[0].integer
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
-		XCTAssertEqual(1, try conn.query("SELECT f(1) as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
-		XCTAssertEqual(1, try conn.query("SELECT f(1.1) as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
+	func testFunctionArgumentInt64() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 1) { values in values[0].integer }
+            try await conn.install(customFunction: fn)
+
+            await XCTAssertNilAsync(try await conn.query("SELECT f(NULL) as result").first?.column("result")?.integer)
+            await XCTAssertEqualAsync(1, try await conn.query("SELECT f(1) as result").first?.column("result")?.integer)
+            await XCTAssertEqualAsync(1, try await conn.query("SELECT f(1.1) as result").first?.column("result")?.integer)
+        }
 	}
 
-	func testFunctionArgumentDouble() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-			return values[0].double
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
-									.map { rows in rows[0].column("result")?.double }.wait())
-		XCTAssertEqual(1.0, try conn.query("SELECT f(1) as result")
-										.map { rows in rows[0].column("result")?.double }.wait())
-		XCTAssertEqual(1.1, try conn.query("SELECT f(1.1) as result")
-										.map { rows in rows[0].column("result")?.double }.wait())
+	func testFunctionArgumentDouble() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 1) { values in values[0].double }
+            try await conn.install(customFunction: fn)
+            
+            await XCTAssertNilAsync(try await conn.query("SELECT f(NULL) as result").first?.column("result")?.double)
+            await XCTAssertEqualAsync(1.0, try await conn.query("SELECT f(1) as result").first?.column("result")?.double)
+            await XCTAssertEqualAsync(1.1, try await conn.query("SELECT f(1.1) as result").first?.column("result")?.double)
+        }
 	}
 
-	func testFunctionArgumentString() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-			return values[0].string
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
-									.map { rows in rows[0].column("result")?.string }.wait())
-		XCTAssertEqual("foo", try conn.query("SELECT f('foo') as result")
-										.map { rows in rows[0].column("result")?.string }.wait())
+	func testFunctionArgumentString() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 1) { values in values[0].string }
+            try await conn.install(customFunction: fn)
+
+            await XCTAssertNilAsync(try await conn.query("SELECT f(NULL) as result").first?.column("result")?.string)
+            await XCTAssertEqualAsync("foo", try await conn.query("SELECT f('foo') as result").first?.column("result")?.string)
+        }
 	}
 
-	func testFunctionArgumentBlob() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-			return values[0].blob
-		}
-		try conn.install(customFunction: fn).wait()
+	func testFunctionArgumentBlob() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 1) { values in values[0].blob }
+            try await conn.install(customFunction: fn)
 
-		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
-									.map { rows in rows[0].column("result")?.blob }.wait())
-
-		XCTAssertEqual("foo".data(using: .utf8)!.sqliteData!.blob, try conn.query("SELECT f(?) as result", ["foo".data(using: .utf8)!.sqliteData!])
-									.map { rows in rows[0].column("result")?.blob }.wait())
-
-		XCTAssertEqual(ByteBuffer(), try conn.query("SELECT f(?) as result", [.blob(ByteBuffer())])
-										.map { rows in rows[0].column("result")?.blob }.wait())
+            await XCTAssertNilAsync(try await conn.query("SELECT f(NULL) as result").first?.column("result")?.blob)
+            await XCTAssertEqualAsync(ByteBuffer(string: "foo"), try await conn.query("SELECT f(?) as result", [.blob(ByteBuffer(string: "foo"))]).first?.column("result")?.blob)
+            await XCTAssertEqualAsync(ByteBuffer(), try await conn.query("SELECT f(?) as result", [.blob(ByteBuffer())]).first?.column("result")?.blob)
+        }
 	}
 
-	func testFunctionArgumentCustomValueType() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-			return CustomValueType(sqliteData: values[0])
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
-									.map { rows in CustomValueType(sqliteData: rows[0].column("result")!) }.wait())
-		XCTAssertEqual(CustomValueType(), try conn.query("SELECT f('CustomValueType') as result")
-										.map { rows in CustomValueType(sqliteData: rows[0].column("result")!)  }.wait())
+	func testFunctionArgumentCustomValueType() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 1) { values in CustomValueType(sqliteData: values[0]) }
+            try await conn.install(customFunction: fn)
+            
+            await XCTAssertNilAsync(try await conn.query("SELECT f(NULL) as result").first?.column("result").flatMap(CustomValueType.init(sqliteData:)))
+            await XCTAssertEqualAsync(CustomValueType(), try await conn.query("SELECT f('CustomValueType') as result").first?.column("result").flatMap(CustomValueType.init(sqliteData:)))
+        }
 	}
 
 	// MARK: - Argument count
 
-	func testFunctionWithoutArgument() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { (values: [SQLiteData]) in
-			return "foo"
-		}
-		try conn.install(customFunction: fn).wait()
-		XCTAssertEqual("foo", try conn.query("SELECT f() as result")
-										.map { rows in rows[0].column("result")?.string }.wait())
-
-		do {
-			_ = try conn.query("SELECT f(1)").wait()
-		} catch let error as SQLiteError {
-			XCTAssertEqual(error.reason, .error)
-			XCTAssertEqual(error.message, "wrong number of arguments to function f()")
-		}
+	func testFunctionWithoutArgument() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in "foo" }
+            try await conn.install(customFunction: fn)
+            
+            await XCTAssertEqualAsync("foo", try await conn.query("SELECT f() as result").first?.column("result")?.string)
+            await XCTAssertThrowsErrorAsync(try await conn.query("SELECT f(1)")) {
+                guard let error = $0 as? SQLiteError else { return XCTFail("Expected SQLiteError, got \(String(reflecting: $0))") }
+                XCTAssertEqual(error.reason, .error)
+                XCTAssertEqual(error.message, "wrong number of arguments to function f()")
+            }
+        }
 	}
 
-	func testFunctionOfOneArgument() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f", argumentCount: 1) { (values: [SQLiteData]) in
-			return values.first?.string?.uppercased()
-		}
+	func testFunctionOfOneArgument() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 1) { values in values.first?.string?.uppercased() }
+            try await conn.install(customFunction: fn)
 
-		try conn.install(customFunction: fn).wait()
+            await XCTAssertNilAsync(try await conn.query("SELECT f(NULL) as result").first?.column("result")?.string)
+            await XCTAssertEqualAsync("ROUé", try await conn.query("SELECT upper(?) as result", [.text("Roué")]).first?.column("result")?.string)
+            await XCTAssertEqualAsync("ROUÉ", try await conn.query("SELECT f(?) as result", [.text("Roué")]).first?.column("result")?.string)
+            await XCTAssertThrowsErrorAsync(try await conn.query("SELECT f()")) {
+                guard let error = $0 as? SQLiteError else { return XCTFail("Expected SQLiteError, got \(String(reflecting: $0))") }
+                XCTAssertEqual(error.reason, .error)
+                XCTAssertEqual(error.message, "wrong number of arguments to function f()")
+            }
+        }
+    }
 
-		XCTAssertNil(try conn.query("SELECT f(NULL) as result")
-									.map { rows in rows[0].column("result")?.string }.wait())
-		XCTAssertEqual("ROUé", try conn.query("SELECT upper(?) as result", [.text("Roué")])
-										.map { rows in rows[0].column("result")?.string }.wait())
-		XCTAssertEqual("ROUÉ", try conn.query("SELECT f(?) as result", [.text("Roué")])
-										.map { rows in rows[0].column("result")?.string }.wait())
-
-		do {
-			_ = try conn.query("SELECT f()").wait()
-		} catch let error as SQLiteError {
-			XCTAssertEqual(error.reason, .error)
-			XCTAssertEqual(error.message, "wrong number of arguments to function f()")
-		}
+	func testFunctionOfTwoArguments() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f", argumentCount: 2) { values in values.compactMap { $0.integer }.reduce(0, +) }
+            try await conn.install(customFunction: fn)
+            
+            await XCTAssertEqualAsync(3, try await conn.query("SELECT f(1, 2) as result").first?.column("result")?.integer)
+            await XCTAssertThrowsErrorAsync(try await conn.query("SELECT f()")) {
+                guard let error = $0 as? SQLiteError else { return XCTFail("Expected SQLiteError, got \(String(reflecting: $0))") }
+                XCTAssertEqual(error.reason, .error)
+                XCTAssertEqual(error.message, "wrong number of arguments to function f()")
+            }
+        }
 	}
 
-	func testFunctionOfTwoArguments() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
+	func testVariadicFunction() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f") { values in values.count }
+            try await conn.install(customFunction: fn)
 
-		let fn = SQLiteCustomFunction("f", argumentCount: 2) { (values: [SQLiteData]) in
-			values
-				.compactMap { $0.integer }
-				.reduce(0, +)
-		}
-
-		try conn.install(customFunction: fn).wait()
-		XCTAssertEqual(3, try conn.query("SELECT f(1, 2) as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
-
-		do {
-			_ = try conn.query("SELECT f()").wait()
-		} catch let error as SQLiteError {
-			XCTAssertEqual(error.reason, .error)
-			XCTAssertEqual(error.message, "wrong number of arguments to function f()")
-		}
-	}
-
-	func testVariadicFunction() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-
-		let fn = SQLiteCustomFunction("f") { (values: [SQLiteData]) in
-			values.count
-		}
-		try conn.install(customFunction: fn).wait()
-
-		XCTAssertEqual(0, try conn.query("SELECT f() as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
-		XCTAssertEqual(1, try conn.query("SELECT f(1) as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
-		XCTAssertEqual(2, try conn.query("SELECT f(1, 2) as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
-		XCTAssertEqual(3, try conn.query("SELECT f(1, 1, 1) as result")
-										.map { rows in rows[0].column("result")?.integer }.wait())
+            await XCTAssertEqualAsync(0, try await conn.query("SELECT f() as result").first?.column("result")?.integer)
+            await XCTAssertEqualAsync(1, try await conn.query("SELECT f(1) as result").first?.column("result")?.integer)
+            await XCTAssertEqualAsync(2, try await conn.query("SELECT f(1, 2) as result").first?.column("result")?.integer)
+            await XCTAssertEqualAsync(3, try await conn.query("SELECT f(1, 1, 1) as result").first?.column("result")?.integer)
+        }
 	}
 
 	// MARK: - Errors
 
-	func testFunctionThrowingDatabaseCustomErrorWithMessage() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
+	func testFunctionThrowingDatabaseCustomErrorWithMessage() async throws {
+        try await withOpenedConnection { conn in
+            struct MyError: Error { let message: String }
+            let fn = SQLiteCustomFunction("f") { _ in throw MyError(message: "custom message") }
+            try await conn.install(customFunction: fn)
 
-		struct MyError: Error {
-			let message: String
-		}
-
-		let fn = SQLiteCustomFunction("f") { _ in
-			throw MyError(message: "custom message")
-		}
-
-		try conn.install(customFunction: fn).wait()
-
-		do {
-			_ = try conn.query("SELECT f()").wait()
-			XCTFail("Expected Error")
-		} catch let error as MyError {
-			XCTFail("expected this not to match")
-			XCTAssertEqual(error.message, "custom message")
-		} catch let error as SQLiteError {
-
-			XCTAssertEqual(error.reason, .error)
-			XCTAssertEqual(error.message, "MyError(message: \"custom message\")")
-		}
+            await XCTAssertThrowsErrorAsync(try await conn.query("SELECT f()")) {
+                guard let error = $0 as? SQLiteError else { return XCTFail("Expected SQLiteError, got \(String(reflecting: $0))") }
+                XCTAssertEqual(error.reason, .error)
+                XCTAssertEqual(error.message, "MyError(message: \"custom message\")")
+            }
+        }
 	}
 
-	func testFunctionThrowingNSError() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-		let fn = SQLiteCustomFunction("f") { _ in
-			throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message", NSLocalizedFailureReasonErrorKey: "custom error message"])
-		}
+	func testFunctionThrowingNSError() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("f") { _ in
+                throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message", NSLocalizedFailureReasonErrorKey: "custom error message"])
+            }
+            try await conn.install(customFunction: fn)
 
-		try conn.install(customFunction: fn).wait()
-
-		do {
-			_ = try conn.query("SELECT f()").wait()
-			XCTFail("Expected Error")
-		} catch let error as SQLiteError {
-			XCTAssertEqual(error.reason, .error)
-			XCTAssertTrue(error.message.contains("CustomErrorDomain"))
-			XCTAssertTrue(error.message.contains("123"))
-			XCTAssertTrue(error.message.contains("custom error message"), "expected '\(error.message)' to contain 'custom error message'")
-		}
+            await XCTAssertThrowsErrorAsync(try await conn.query("SELECT f()")) {
+                guard let error = $0 as? SQLiteError else { return XCTFail("Expected SQLiteError, got \(String(reflecting: $0))") }
+                XCTAssertEqual(error.reason, .error)
+                XCTAssertTrue(error.message.contains("CustomErrorDomain"))
+                XCTAssertTrue(error.message.contains("123"))
+                XCTAssertTrue(error.message.contains("custom error message"), "expected '\(error.message)' to contain 'custom error message'")
+            }
+        }
 	}
 
 	// MARK: - Misc
 
-	func testFunctionsAreClosures() throws {
-		let conn = try SQLiteConnection.open(storage: .memory, threadPool: .singleton, on: self.eventLoop).wait()
-		defer { try! conn.close().wait() }
-        
-        final class QuickBox<T: Sendable>: @unchecked Sendable {
-            var value: T
-            init(_ value: T) { self.value = value }
+	func testFunctionsCanBeExtremelyUnsafeClosures() async throws {
+        try await withOpenedConnection { conn in
+            final class QuickBox<T: Sendable>: @unchecked Sendable { var value: T; init(_ value: T) { self.value = value } }
+            let x = QuickBox(123)
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in x.value }
+            try await conn.install(customFunction: fn)
+            
+            x.value = 321
+            await XCTAssertEqualAsync(321, try await conn.query("SELECT f() as result").first?.column("result")?.integer)
         }
-		let x = QuickBox(123)
-		let fn = SQLiteCustomFunction("f", argumentCount: 0) { dbValues in
-			x.value
-		}
-		try conn.install(customFunction: fn).wait()
-		x.value = 321
-		XCTAssertEqual(321, try conn.query("SELECT f() as result").map({ rows in rows[0].column("result")?.integer }).wait())
 	}
 
 	// MARK: - setup
 
-	var eventLoop: any EventLoop { MultiThreadedEventLoopGroup.singleton.any() }
-
-    override func setUpWithError() throws {
+    override class func setUp() {
         XCTAssert(isLoggingConfigured)
     }
 }
