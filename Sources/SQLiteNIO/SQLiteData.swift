@@ -90,7 +90,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
         case .float(let float): return float.description
         case .integer(let int): return int.description
         case .null: return "null"
-        case .text(let text): return "\"" + text + "\""
+        case .text(let text): return #""\#(text)""#
         }
     }
 
@@ -101,9 +101,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible {
         case .integer(let value): try container.encode(value)
         case .float(let value): try container.encode(value)
         case .text(let value): try container.encode(value)
-        case .blob(var value):
-            let bytes = value.readBytes(length: value.readableBytes) ?? []
-            try container.encode(bytes)
+        case .blob(let value): try container.encode(Array(value.readableBytesView)) // N.B.: Don't use ByteBuffer's Codable conformance; it encodes as Base64, not raw bytes
         case .null: try container.encodeNil()
         }
     }
@@ -119,7 +117,11 @@ extension SQLiteData {
 		case SQLITE_FLOAT:
 			self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
 		case SQLITE_TEXT:
-			self = .text(String(cString: sqlite_nio_sqlite3_value_text(sqliteValue)!))
+            if let raw = sqlite_nio_sqlite3_value_text(sqliteValue) {
+                self = .text(String.init(cString: raw))
+            } else {
+                self = .text("")
+            }
 		case SQLITE_BLOB:
 			if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
 				let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
