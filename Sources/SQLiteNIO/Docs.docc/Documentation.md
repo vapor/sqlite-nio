@@ -4,12 +4,11 @@
     @TitleHeading(Package)
 }
 
-🪶 Non-blocking, event-driven Swift client for SQLite with embedded libsqlite
+🪶 Non-blocking, event-driven Swift client for SQLite with embedded `libsqlite`.
 
 ## Supported Versions
 
-This package is compatible with all platforms supported by [SwiftNIO 2.x](https://github.com/apple/swift-nio/). It has
-been specifically tested on the following platforms:
+This package is compatible with all platforms supported by [SwiftNIO 2.x](https://github.com/apple/swift-nio/). It has been specifically tested on the following platforms:
 
 - Ubuntu 20.04 ("Focal") and 22.04 ("Jammy")
 - Amazon Linux 2

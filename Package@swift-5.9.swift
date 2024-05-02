@@ -1,4 +1,4 @@
-// swift-tools-version:5.8
+// swift-tools-version:5.9
 import PackageDescription
 
 let package = Package(
@@ -21,7 +21,10 @@ let package = Package(
             name: "VendorSQLite",
             capability: .command(
                 intent: .custom(verb: "vendor-sqlite", description: "Vendor SQLite"),
-                permissions: [/*.writeToPackageDirectory(reason: "Update the vendored SQLite files")*/]
+                permissions: [
+                    .allowNetworkConnections(scope: .all(ports: [443]), reason: "Retrieve the latest build of SQLite"),
+                    .writeToPackageDirectory(reason: "Update the vendored SQLite files"),
+                ]
             ),
             exclude: ["001-warnings-and-data-race.patch"]
         ),
@@ -51,6 +54,7 @@ let package = Package(
 )
 
 var swiftSettings: [SwiftSetting] { [
+    .enableUpcomingFeature("ExistentialAny"),
     .enableUpcomingFeature("ConciseMagicFile"),
     .enableUpcomingFeature("ForwardTrailingClosures"),
     .enableUpcomingFeature("DisableOutwardActorInference"),
