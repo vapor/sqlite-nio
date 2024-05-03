@@ -85,6 +85,6 @@ var sqliteCSettings: [CSetting] { [
     .define("SQLITE_OMIT_LOAD_EXTENSION"),
     .define("SQLITE_OMIT_SHARED_CACHE"),
     .define("SQLITE_SECURE_DELETE"),
-    .define("SQLITE_THREADSAFE", to: "2"),
+    .define("SQLITE_THREADSAFE", to: "1"),
     .define("SQLITE_USE_URI"),
 ] }
