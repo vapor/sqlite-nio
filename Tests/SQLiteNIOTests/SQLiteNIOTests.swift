@@ -172,6 +172,27 @@ final class SQLiteNIOTests: XCTestCase {
         await XCTAssertNoThrowAsync(conn = try await SQLiteConnection.open(storage: .memory).get())
         try await conn?.close().get()
     }
+    
+    func testSerializedConnectionAccess() async throws {
+        /// Although this test has no assertions, it does serve a useful purpose: when run with Thread Sanitizer
+        /// enabed, it validates that we are using SQLite in "serialized" mode (e.g. it is safe to use a single
+        /// connection simultaneously from multiple threads) rather than single- or multi-threaded mode.
+        try await withOpenedConnection { conn in
+            let t1 = Task {
+                for _ in 0 ..< 100 {
+                    _ = try await conn.query("SELECT random()", [], { _ in })
+                }
+            }
+            let t2 = Task {
+                for _ in 0 ..< 100 {
+                    _ = try await conn.query("SELECT random()", [], { _ in })
+                }
+            }
+            
+            try await t1.value
+            try await t2.value
+        }
+    }
 
     override class func setUp() {
         XCTAssert(isLoggingConfigured)
