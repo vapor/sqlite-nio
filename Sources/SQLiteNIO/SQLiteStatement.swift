@@ -111,13 +111,13 @@ struct SQLiteStatement {
         case SQLITE_NULL:
             return .null
         default:
-            throw SQLiteError(reason: .error, message: "Unexpected column type.")
+            throw SQLiteError(reason: .error, message: "Unexpected column type")
         }
     }
 
     private func column(at offset: Int32) throws -> String {
         guard let cName = sqlite_nio_sqlite3_column_name(self.handle, offset) else {
-            throw SQLiteError(reason: .error, message: "Unexpectedly nil column name at offset \(offset)")
+            throw SQLiteError(reason: .error, message: "Unexpectedly found a nil column name at offset \(offset)")
         }
         return String(cString: cName)
     }
