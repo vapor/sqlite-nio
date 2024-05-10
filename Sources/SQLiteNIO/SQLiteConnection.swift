@@ -66,7 +66,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         }
 
         var handle: OpaquePointer?
-        let openOptions = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
+        let openOptions = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI | SQLITE_OPEN_EXRESCODE
         let openRet = sqlite_nio_sqlite3_open_v2(path, &handle, openOptions, nil)
         guard openRet == SQLITE_OK else {
             throw SQLiteError(reason: .init(statusCode: openRet), message: "Failed to open to SQLite database at \(path)")
