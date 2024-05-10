@@ -1,4 +1,5 @@
 import NIOCore
+import NIOFoundationCompat
 import Foundation
 
 public protocol SQLiteDataConvertible {
@@ -8,19 +9,20 @@ public protocol SQLiteDataConvertible {
 
 extension String: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
-        guard case .text(let value) = sqliteData else {
+        guard let value = sqliteData.string else {
             return nil
         }
         self = value
     }
 
     public var sqliteData: SQLiteData? {
-        return .text(self)
+        .text(self)
     }
 }
 
 extension FixedWidthInteger {
     public init?(sqliteData: SQLiteData) {
+        // Don't use `SQLiteData.integer`, we don't want to attempt converting strings here.
         guard case .integer(let value) = sqliteData else {
             return nil
         }
@@ -28,7 +30,7 @@ extension FixedWidthInteger {
     }
 
     public var sqliteData: SQLiteData? {
-        return .integer(numericCast(self))
+        .integer(numericCast(self))
     }
 }
 
@@ -45,27 +47,30 @@ extension UInt64: SQLiteDataConvertible { }
 
 extension Double: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
-        guard case .float(let value) = sqliteData else {
-            return nil
+        // Don't use `SQLiteData.double`, we don't want to attempt converting strings here.
+        switch sqliteData {
+        case .integer(let int): self.init(int)
+        case .float(let double): self = double
+        case .text(_), .blob(_), .null: return nil
         }
-        self = value
     }
 
     public var sqliteData: SQLiteData? {
-        return .float(self)
+        .float(self)
     }
 }
 
 extension Float: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
-        guard case .float(let value) = sqliteData else {
-            return nil
+        switch sqliteData {
+        case .integer(let int): self.init(int)
+        case .float(let double): self.init(double)
+        case .text(_), .blob(_), .null: return nil
         }
-        self = Float(value)
     }
 
     public var sqliteData: SQLiteData? {
-        return .float(Double(self))
+        .float(Double(self))
     }
 }
 
@@ -78,38 +83,33 @@ extension ByteBuffer: SQLiteDataConvertible {
     }
 
     public var sqliteData: SQLiteData? {
-        return .blob(self)
+        .blob(self)
     }
 }
 
 extension Data: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
-        guard case .blob(var value) = sqliteData else {
+        guard case .blob(let value) = sqliteData else {
             return nil
         }
-        guard let data = value.readBytes(length: value.readableBytes) else {
-            return nil
-        }
-        self = Data(data)
+        self = .init(buffer: value, byteTransferStrategy: .copy)
     }
 
     public var sqliteData: SQLiteData? {
-        var buffer = ByteBufferAllocator().buffer(capacity: self.count)
-        buffer.writeBytes(self)
-        return .blob(buffer)
+        .blob(.init(data: self))
     }
 }
 
 extension Bool: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         guard let bool = sqliteData.bool else {
-                return nil
-            }
-            self = bool
+            return nil
         }
+        self = bool
+    }
 
     public var sqliteData: SQLiteData? {
-        return .integer(self ? 1 : 0)
+        .integer(self ? 1 : 0)
     }
 }
 
@@ -139,7 +139,7 @@ extension Date: SQLiteDataConvertible {
     }
 
     public var sqliteData: SQLiteData? {
-        return .float(timeIntervalSince1970)
+        .float(timeIntervalSince1970)
     }
 }
 
