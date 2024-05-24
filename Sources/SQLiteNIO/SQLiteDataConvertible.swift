@@ -144,7 +144,10 @@ extension Date: SQLiteDataConvertible {
 }
 
 /// Matches dates from the `datetime()` function
-let dateTimeFormatter: ISO8601DateFormatter = {
+///
+/// > Note: Because `ISO8601DateFormatter` isn't `Sendable`, we have to do the MUCH less efficient thing of creating
+/// > a new formatter every time we want to use it instead of just caching one :(
+var dateTimeFormatter: ISO8601DateFormatter {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [
         .withFullDate,
@@ -154,14 +157,17 @@ let dateTimeFormatter: ISO8601DateFormatter = {
         .withColonSeparatorInTime
     ]
     return formatter
-}()
+}
 
 /// Matches dates from the `date()` function
-let dateFormatter: ISO8601DateFormatter = {
+///
+/// > Note: Because `ISO8601DateFormatter` isn't `Sendable`, we have to do the MUCH less efficient thing of creating
+/// > a new formatter every time we want to use it instead of just caching one :(
+var dateFormatter: ISO8601DateFormatter {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [
         .withFullDate,
         .withDashSeparatorInDate
     ]
     return formatter
-}()
+}
