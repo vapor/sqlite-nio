@@ -236,7 +236,6 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         logger: Logger,
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
-        logger.debug("\(query) \(binds)")
         let promise = self.eventLoop.makePromise(of: Void.self)
         self.threadPool.submit {
             guard case $0 = NIOThreadPool.WorkItemState.active else {
