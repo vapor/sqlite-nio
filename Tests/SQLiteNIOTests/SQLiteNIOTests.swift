@@ -70,18 +70,8 @@ final class SQLiteNIOTests: XCTestCase {
     
     func testTimestampStorage() async throws {
         try await withOpenedConnection { conn in
-            let date = Date()
-            let rows = try await conn.query("SELECT ? as date", [date.sqliteData!])
-            XCTAssertEqual(rows.first?.column("date"), .float(date.timeIntervalSince1970))
-            XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description, date.description)
-            XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:)), date)
-            XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.timeIntervalSinceReferenceDate, date.timeIntervalSinceReferenceDate)
-        }
-    }
-
-    func testTimestampStorageRoundToMicroseconds() async throws {
-        try await withOpenedConnection { conn in
-           // Test value that when read back out of sqlite results in 7 decimal places that we need to round to microseconds
+            // When the value is read back out of sqlite, it will have only microsecond precision, make sure we use a Date with
+            // the same limit or else the test will fail.
             let date = Date(timeIntervalSinceReferenceDate: 689658914.293192)
             let rows = try await conn.query("SELECT ? as date", [date.sqliteData!])
             XCTAssertEqual(rows.first?.column("date"), .float(date.timeIntervalSince1970))
