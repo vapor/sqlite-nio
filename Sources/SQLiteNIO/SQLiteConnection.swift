@@ -78,7 +78,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         ///
         /// File-based databases persist as long as the files representing them on disk does, and can be opened
         /// multiple times within the same process or even by multiple processes if configured properly.
-        case file(path: String)
+        case file(path: String, readonly: Bool = false)
     }
 
     /// Return the version of the embedded libsqlite3 as a 32-bit integer value.
@@ -149,16 +149,26 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         eventLoop: any EventLoop
     ) throws -> SQLiteConnection {
         let path: String
+        var readonlyMode = false
+
         switch storage {
         case .memory: path = ":memory:"
-        case .file(let file): path = file
+        case .file(let file, let readonly):
+            path = file
+            readonlyMode = readonly
         }
 
         var handle: OpaquePointer?
-        let openOptions = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI | SQLITE_OPEN_EXRESCODE
+        var openOptions =
+            readonlyMode ? SQLITE_OPEN_READONLY : SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE
+        openOptions |=
+            SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI
+            | SQLITE_OPEN_EXRESCODE
         let openRet = sqlite_nio_sqlite3_open_v2(path, &handle, openOptions, nil)
         guard openRet == SQLITE_OK else {
-            throw SQLiteError(reason: .init(statusCode: openRet), message: "Failed to open to SQLite database at \(path)")
+            throw SQLiteError(
+                reason: .init(statusCode: openRet),
+                message: "Failed to open to SQLite database at \(path)")
         }
         
         let busyRet = sqlite_nio_sqlite3_busy_handler(handle, { _, _ in 1 }, nil)
