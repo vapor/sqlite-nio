@@ -1,7 +1,4 @@
 import NIOCore
-#if swift(<5.9)
-import NIOConcurrencyHelpers
-#endif
 import NIOPosix
 import CSQLite
 import Logging
@@ -33,27 +30,12 @@ import Logging
 /// 2. An `OpaquePointer` can not be natively `Sendable`, by definition; it's opaque! The `@unchecked`
 ///    annotation is how we tell the compiler "we've taken the appropriate precautions to make moving
 ///    values of this type between isolation regions safe".
-///
-/// > Note: It appears that in Swift 5.8, TSan likes to throw false positive warnings about this type, hence
-/// > the compiler conditionals around using bogus extra locking.
 final class SQLiteConnectionHandle: @unchecked Sendable {
-    #if swift(<5.9)
-    private let _raw: NIOLockedValueBox<OpaquePointer?>
-    var raw: OpaquePointer? {
-        get { self._raw.withLockedValue { $0 } }
-        set { self._raw.withLockedValue { $0 = newValue } }
-    }
-    
-    init(_ raw: OpaquePointer?) {
-        self._raw = .init(raw)
-    }
-    #else
     var raw: OpaquePointer?
     
     init(_ raw: OpaquePointer?) {
         self.raw = raw
     }
-    #endif
 }
 
 /// Represents a single open connection to an SQLite database, either on disk or in memory.

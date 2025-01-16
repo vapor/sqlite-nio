@@ -103,7 +103,7 @@ extension SQLiteDatabase {
     }
 
     /// Async version of ``withConnection(_:)-48y34``.
-    public func withConnection<T>(
+    public func withConnection<T: Sendable>(
         _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
     ) async throws -> T {
         try await self.withConnection { conn in
@@ -162,7 +162,7 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
         self.database.withConnection(closure)
     }
     // See `SQLiteDatabase.withConnection(_:)`.
-    func withConnection<T>(_ closure: @escaping @Sendable (SQLiteConnection) async throws -> T) async throws -> T {
+    func withConnection<T: Sendable>(_ closure: @escaping @Sendable (SQLiteConnection) async throws -> T) async throws -> T {
         try await self.database.withConnection(closure)
     }
     
