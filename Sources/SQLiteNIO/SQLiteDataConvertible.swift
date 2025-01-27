@@ -127,8 +127,7 @@ extension Date: SQLiteDataConvertible {
             guard let d = dateTimeFormatter.date(from: v) ?? dateFormatter.date(from: v) else {
                 return nil
             }
-            self = d
-            return
+            value = d.timeIntervalSince1970
         default:
             return nil
         }
