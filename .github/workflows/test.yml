@@ -5,19 +5,15 @@ concurrency:
 on:
   pull_request: { types: [opened, reopened, synchronize, ready_for_review] }
   push: { branches: [ main ] }
-
 env:
   LOG_LEVEL: info
-  SWIFT_DETERMINISTIC_HASHING: 1
 
 jobs:
-
   # Make sure downstream dependents still work
   dependents-check:
     if: ${{ !(github.event.pull_request.draft || false) }}
     runs-on: ubuntu-latest
-    container: swift:5.10-jammy
-    steps:
+    container: swift:6.1-noble
       - name: Check out package
         uses: actions/checkout@v4
         with: { path: 'sqlite-nio' }
@@ -39,3 +35,6 @@ jobs:
   unit-tests:
     uses: vapor/ci/.github/workflows/run-unit-tests.yml@main
     secrets: inherit
+    with:
+      with_musl: true
+      with_android: true
