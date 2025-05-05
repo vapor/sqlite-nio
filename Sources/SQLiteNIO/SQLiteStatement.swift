@@ -92,7 +92,7 @@ struct SQLiteStatement {
     private func data(at offset: Int32) throws -> SQLiteData {
         switch sqlite_nio_sqlite3_column_type(self.handle, offset) {
         case SQLITE_INTEGER:
-            return .integer(Int(sqlite_nio_sqlite3_column_int64(self.handle, offset)))
+            return .integer(.init(sqlite_nio_sqlite3_column_int64(self.handle, offset)))
         case SQLITE_FLOAT:
             return .float(Double(sqlite_nio_sqlite3_column_double(self.handle, offset)))
         case SQLITE_TEXT:

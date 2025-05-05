@@ -1,8 +1,6 @@
 import XCTest
 import SQLiteNIO
 import Logging
-import NIOCore
-import NIOPosix
 import NIOFoundationCompat
 
 /// Run the provided closure with an opened ``SQLiteConnection`` using an in-memory database and the singleton thread
@@ -100,7 +98,7 @@ final class SQLiteNIOTests: XCTestCase {
             _ = try await conn.query(#"INSERT INTO test (date) VALUES (?)"#, [date.sqliteData!])
             let rows = try await conn.query("SELECT * FROM test")
             
-            XCTAssertTrue(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(Int(date.timeIntervalSince1970)))
+            XCTAssertTrue(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(.init(date.timeIntervalSince1970)))
             XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description, date.description)
         }
     }
@@ -109,7 +107,7 @@ final class SQLiteNIOTests: XCTestCase {
         try await withOpenedConnection { conn in
             let rows = try await conn.query("SELECT 1 as foo, 2 as foo")
             let row0 = try XCTUnwrap(rows.first)
-            var i = 0
+            var i: SQLiteInt64 = 0
             for column in row0.columns {
                 XCTAssertEqual(column.name, "foo")
                 i += column.data.integer ?? 0
@@ -127,7 +125,7 @@ final class SQLiteNIOTests: XCTestCase {
             _ = try await conn.query(#"INSERT INTO scores (score) VALUES (?), (?), (?)"#, [.integer(3), .integer(4), .integer(5)])
 
             struct MyAggregate: SQLiteCustomAggregate {
-                var sum: Int = 0
+                var sum: SQLiteInt64 = 0
                 mutating func step(_ values: [SQLiteData]) throws {
                     self.sum += (values.first?.integer ?? 0)
                 }

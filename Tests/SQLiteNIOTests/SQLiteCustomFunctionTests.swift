@@ -46,7 +46,7 @@ final class DatabaseFunctionTests: XCTestCase {
         try await withOpenedConnection { conn in
             let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in 1 }
             try await conn.install(customFunction: fn)
-            await XCTAssertEqualAsync(Int(1), try await conn.query("SELECT f() as result").first?.column("result")?.integer)
+            await XCTAssertEqualAsync(.init(1), try await conn.query("SELECT f() as result").first?.column("result")?.integer)
         }
 	}
 

@@ -1,5 +1,10 @@
 import NIOConcurrencyHelpers
 import NIOCore
+#if canImport(NIOAsyncRuntime)
+import NIOAsyncRuntime
+typealias MultiThreadedEventLoopGroup = AsyncEventLoopGroup
+public typealias NIOThreadPool = AsyncThreadPool
+#endif
 import NIOPosix
 import CSQLite
 import Logging

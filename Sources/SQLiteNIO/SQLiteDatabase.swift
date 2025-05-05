@@ -1,5 +1,4 @@
 import NIOCore
-import NIOPosix
 import CSQLite
 import Logging
 
