@@ -1,3 +1,4 @@
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import CSQLite
@@ -62,7 +63,36 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         /// multiple times within the same process or even by multiple processes if configured properly.
         case file(path: String)
     }
-
+    
+    /// Represents the type of update operation that triggered the update hook.
+    public enum UpdateOperation: Int32, Sendable {
+        /// An INSERT operation.
+        case insert = 18 // SQLITE_INSERT
+        /// An UPDATE operation.
+        case update = 23 // SQLITE_UPDATE
+        /// A DELETE operation.
+        case delete = 9  // SQLITE_DELETE
+    }
+    
+    /// Event produced by the update hook.
+    ///
+    /// Contains information about a database modification operation that triggered an update hook.
+    public struct SQLiteUpdateEvent: Sendable {
+        /// The type of database operation that was performed.
+        public let operation: UpdateOperation
+        /// The name of the database that was modified.
+        public let database : String
+        /// The name of the table that was modified.
+        public let table    : String
+        /// The rowid of the row that was affected by the operation.
+        public let rowID    : Int64
+    }
+    
+    /// The type signature for update hook callbacks.
+    ///
+    /// - Parameter event: A ``SQLiteUpdateEvent`` containing details about the database modification.
+    public typealias UpdateHookCallback = @Sendable (SQLiteUpdateEvent) -> Void
+    
     /// Return the version of the embedded libsqlite3 as a 32-bit integer value.
     /// 
     /// The value is laid out identicallly to [the `SQLITE_VERSION_NUMBER` constant](c_source_id).
@@ -165,6 +195,9 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The thread pool used by this connection when calling libsqlite3 APIs.
     private let threadPool: NIOThreadPool
     
+    /// The currently registered update hook callback.
+    private let updateHookCallback = NIOLockedValueBox<UpdateHookCallback?>(nil)
+    
     /// Initialize a new ``SQLiteConnection``. Internal use only.
     private init(
         handle: OpaquePointer?,
@@ -248,6 +281,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// - Returns: A future indicating completion of connection closure.
     public func close() -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            self._applyUpdateHook(nil)
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }
@@ -257,26 +291,47 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     ///
     /// - Parameter customFunction: The function to install.
     /// - Returns: A future indicating completion of the install operation.
-	public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-		self.logger.trace("Adding custom function \(customFunction.name)")
-		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+    public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+        self.logger.trace("Adding custom function \(customFunction.name)")
+        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             try customFunction.install(in: self)
-		}
-	}
-
+        }
+    }
+    
     /// Uninstall the provided ``SQLiteCustomFunction`` from the connection.
     ///
     /// - Parameter customFunction: The function to remove.
     /// - Returns: A future indicating completion of the uninstall operation.
-	public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-		self.logger.trace("Removing custom function \(customFunction.name)")
-		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+    public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+        self.logger.trace("Removing custom function \(customFunction.name)")
+        return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             try customFunction.uninstall(in: self)
-		}
-	}
-
+        }
+    }
+    
+    /// Installs **or replaces** the single SQLite *update-hook* for this
+    /// connection. Call again to replace the existing callback; pass `nil`
+    /// to remove it.
+    ///
+    /// ```swift
+    /// connection
+    ///     .setUpdateHook { event in
+    ///         print("\(event.table) row \(event.rowID) was \(event.operation)")
+    ///     }
+    ///     .whenSuccess { print("hook installed") }
+    /// ```
+    public func setUpdateHook(
+        _ callback: UpdateHookCallback?
+    ) -> EventLoopFuture<Void> {
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            self._applyUpdateHook(callback)
+        }
+    }
+    
     /// Deinitializer for ``SQLiteConnection``.
     deinit {
+        self.updateHookCallback.withLockedValue { $0 = nil }
+        
         assert(self.handle.raw == nil, "SQLiteConnection was not closed before deinitializing")
     }
 }
@@ -356,6 +411,7 @@ extension SQLiteConnection {
     /// No further operations may be performed on the connection after calling this method.
     public func close() async throws {
         try await self.threadPool.runIfActive {
+            self._applyUpdateHook(nil)
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }
@@ -378,6 +434,92 @@ extension SQLiteConnection {
 		self.logger.trace("Removing custom function \(customFunction.name)")
 		return try await self.threadPool.runIfActive {
             try customFunction.uninstall(in: self)
-		}
-	}
+        }
+    }
+    
+    /// Installs **or replaces** the single SQLite *update-hook* for this
+    /// connection. Call again to replace the existing callback; pass `nil`
+    /// to remove it.
+    ///
+    /// ```swift
+    /// try await connection.setUpdateHook { event in
+    ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
+    /// }
+    /// ```
+    /// - Parameter callback: The closure to invoke, or `nil` to remove it.
+    public func setUpdateHook(
+        _ callback: UpdateHookCallback?
+    ) async throws {
+        try await self.threadPool.runIfActive {
+            self._applyUpdateHook(callback)
+        }
+    }
+    
+    /// Returns a stream that yields a ``SQLiteUpdateEvent`` every time a row
+    /// is inserted, updated, or deleted.
+    ///
+    /// The underlying hook is installed when the stream starts and removed
+    /// automatically when iteration finishes.
+    ///
+    /// ```swift
+    /// for try await event in connection.updates() {
+    ///     print(event)
+    /// }
+    /// ```
+    public func updates() -> AsyncThrowingStream<SQLiteUpdateEvent, any Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    try await self.setUpdateHook { continuation.yield($0) }
+                } catch {
+                    continuation.finish(throwing: error)
+                    return
+                }
+                continuation.onTermination = { _ in
+                    Task { try? await self.setUpdateHook(nil) }
+                }
+            }
+        }
+    }
+    
+    // MARK: – Private helper
+    
+    /// Installs, replaces, or removes the C-level hook and stores the Swift
+    /// callback in `updateHookCallback`.
+    private func _applyUpdateHook(_ callback: UpdateHookCallback?) {
+        // Persist (or clear) the Swift callback atomically.
+        self.updateHookCallback.withLockedValue { $0 = callback }
+        
+        if callback != nil {
+            let ctx = Unmanaged.passUnretained(self).toOpaque()
+            _ = sqlite_nio_sqlite3_update_hook(
+                self.handle.raw,
+                { ctx, op, db, tbl, row in
+                    guard
+                        let ctx    = ctx,
+                        let dbPtr  = db,
+                        let tblPtr = tbl,
+                        let opEnum = UpdateOperation(rawValue: op)
+                    else { return }
+                    
+                    let conn = Unmanaged<SQLiteConnection>
+                        .fromOpaque(ctx)
+                        .takeUnretainedValue()
+                    
+                    // Snapshot under the lock to avoid races.
+                    guard let cb = conn.updateHookCallback
+                        .withLockedValue({ $0 })
+                    else { return }
+                    
+                    cb(SQLiteUpdateEvent(operation: opEnum,
+                                         database : String(cString: dbPtr),
+                                         table    : String(cString: tblPtr),
+                                         rowID    : row))
+                },
+                ctx)
+        } else {
+            // Unregister the C-level hook when callback is `nil`.
+            _ = sqlite_nio_sqlite3_update_hook(self.handle.raw, nil, nil)
+        }
+    }
 }
