@@ -1,4 +1,8 @@
+#if SQLCipher
+import CSQLCipher
+#else
 import CSQLite
+#endif
 import Foundation
 
 public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
