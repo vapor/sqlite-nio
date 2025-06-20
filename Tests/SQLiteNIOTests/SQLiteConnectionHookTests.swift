@@ -26,12 +26,7 @@ fileprivate actor RollbackCollector {
     func count() -> Int { calls }
 }
 
-fileprivate actor TransactionCollector {
-    private var events: [SQLiteTransactionEvent] = []
-    func append(_ e: SQLiteTransactionEvent) { events.append(e) }
-    func all() -> [SQLiteTransactionEvent]       { events }
-    func count() -> Int                          { events.count }
-}
+
 
 // MARK: – Async/await tests
 
@@ -89,10 +84,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testRollbackHook() async throws {
         try await withOpenedConnection { db in
             let col = RollbackCollector()
-            try await db.setTransactionHook { e in
-                if e.type == .rollback {
-                    Task { await col.append() }
-                }
+            try await db.setRollbackHook {
+                Task { await col.append() }
             }
 
             _ = try await db.query("BEGIN TRANSACTION", [])
@@ -244,10 +237,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
         defer { _ = try? db.close().wait() }
 
         let col = RollbackCollector()
-        try db.setTransactionHook { e in
-            if e.type == .rollback {
-                Task { await col.append() }
-            }
+        try db.setRollbackHook {
+            Task { await col.append() }
         }.wait()
 
         _ = try db.query("BEGIN TRANSACTION", []).wait()

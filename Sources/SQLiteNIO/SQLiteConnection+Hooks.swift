@@ -28,39 +28,19 @@ public struct SQLiteUpdateEvent: Sendable {
     public let rowID: Int64
 }
 
-/// The type of transaction event.
-public enum SQLiteTransactionEventType: Sendable {
-    /// A transaction was committed.
-    case commit
-    /// A transaction was rolled back.
-    case rollback
-}
-
-/// Event produced by transaction hooks.
-///
-/// Contains information about transaction state changes.
-public struct SQLiteTransactionEvent: Sendable {
-    /// The type of transaction event.
-    public let type: SQLiteTransactionEventType
-    /// The database name where the transaction occurred.
-    public let database: String?
-}
-
 extension SQLiteConnection {
     /// The type signature for update hook callbacks.
     ///
     /// - Parameter event: A ``SQLiteUpdateEvent`` containing details about the database modification.
     public typealias SQLiteUpdateHookCallback = @Sendable (SQLiteUpdateEvent) -> Void
 
-    /// The type signature for transaction hook callbacks.
-    ///
-    /// - Parameter event: A ``SQLiteTransactionEvent`` containing details about the transaction event.
-    public typealias SQLiteTransactionHookCallback = @Sendable (SQLiteTransactionEvent) -> Void
-
     /// The type signature for commit hook callbacks.
     ///
     /// - Returns: `true` to abort the commit, `false` to allow it to proceed.
     public typealias SQLiteCommitHookCallback = @Sendable () -> Bool
+
+    /// The type signature for rollback hook callbacks.
+    public typealias SQLiteRollbackHookCallback = @Sendable () -> Void
 }
 
 // MARK: - Hook Management (Futures API)
@@ -69,8 +49,6 @@ extension SQLiteConnection {
     /// Installs **or replaces** the single SQLite *update-hook* for this
     /// connection. Call again to replace the existing callback; pass `nil`
     /// to remove it.
-    ///
-    /// One hook slot per connection; calling again replaces the prior hook (latest wins).
     ///
     /// ```swift
     /// connection
@@ -113,41 +91,25 @@ extension SQLiteConnection {
         }
     }
 
-    /// Installs both commit and rollback hooks with a unified callback.
+    /// Installs **or replaces** the single SQLite *rollback-hook* for this
+    /// connection. Call again to replace the existing callback; pass `nil`
+    /// to remove it.
     ///
-    /// This is a convenience method for monitoring transaction boundaries - it simply
-    /// registers both commit and rollback observers with a single call.
-    /// Unlike `setCommitHook`, this method cannot abort commits - it's purely observational.
+    /// The rollback hook is invoked whenever a transaction is rolled back.
     ///
     /// ```swift
     /// connection
-    ///     .setTransactionHook { event in
-    ///         switch event.type {
-    ///         case .commit:
-    ///             print("Transaction committed")
-    ///         case .rollback:
-    ///             print("Transaction rolled back")
-    ///         }
+    ///     .setRollbackHook {
+    ///         print("Transaction was rolled back")
     ///     }
-    ///     .whenSuccess { print("transaction hooks installed") }
+    ///     .whenSuccess { print("rollback hook installed") }
     /// ```
-    /// - Parameter callback: The closure to invoke, or `nil` to remove both hooks.
-    public func setTransactionHook(
-        _ callback: SQLiteTransactionHookCallback?
+    /// - Parameter callback: The closure to invoke, or `nil` to remove it.
+    public func setRollbackHook(
+        _ callback: SQLiteRollbackHookCallback?
     ) -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            if let callback = callback {
-                self._applyCommitHook {
-                    callback(SQLiteTransactionEvent(type: .commit, database: nil))
-                    return false // Never abort commits with this unified API
-                }
-                self._applyRollbackHook {
-                    callback(SQLiteTransactionEvent(type: .rollback, database: nil))
-                }
-            } else {
-                self._applyCommitHook(nil)
-                self._applyRollbackHook(nil)
-            }
+            self._applyRollbackHook(callback)
         }
     }
 }
@@ -192,39 +154,21 @@ extension SQLiteConnection {
         }
     }
 
-    /// Installs both commit and rollback hooks with a unified callback.
-    ///
-    /// This is a convenience method for monitoring transaction boundaries - it simply
-    /// registers both commit and rollback observers with a single call.
-    /// Unlike `setCommitHook`, this method cannot abort commits - it's purely observational.
+    /// Installs **or replaces** the single SQLite *rollback-hook* for this
+    /// connection. Call again to replace the existing callback; pass `nil`
+    /// to remove it.
     ///
     /// ```swift
-    /// try await connection.setTransactionHook { event in
-    ///     switch event.type {
-    ///     case .commit:
-    ///         print("Transaction committed")
-    ///     case .rollback:
-    ///         print("Transaction rolled back")
-    ///     }
+    /// try await connection.setRollbackHook {
+    ///     print("Transaction was rolled back")
     /// }
     /// ```
-    /// - Parameter callback: The closure to invoke, or `nil` to remove both hooks.
-    public func setTransactionHook(
-        _ callback: SQLiteTransactionHookCallback?
+    /// - Parameter callback: The closure to invoke, or `nil` to remove it.
+    public func setRollbackHook(
+        _ callback: SQLiteRollbackHookCallback?
     ) async throws {
         try await self.threadPool.runIfActive {
-            if let callback = callback {
-                self._applyCommitHook {
-                    callback(SQLiteTransactionEvent(type: .commit, database: nil))
-                    return false // Never abort commits with this unified API
-                }
-                self._applyRollbackHook {
-                    callback(SQLiteTransactionEvent(type: .rollback, database: nil))
-                }
-            } else {
-                self._applyCommitHook(nil)
-                self._applyRollbackHook(nil)
-            }
+            self._applyRollbackHook(callback)
         }
     }
 }
@@ -233,7 +177,7 @@ extension SQLiteConnection {
 
 extension SQLiteConnection {
     /// Installs, replaces, or removes the C-level update hook and stores the Swift callback.
-    func _applyUpdateHook(_ callback: SQLiteUpdateHookCallback?) {
+    fileprivate func _applyUpdateHook(_ callback: SQLiteUpdateHookCallback?) {
         // Persist (or clear) the Swift callback atomically.
         self.updateHookCallback.withLockedValue { $0 = callback }
 
@@ -271,7 +215,7 @@ extension SQLiteConnection {
     }
 
     /// Installs, replaces, or removes the C-level commit hook and stores the Swift callback.
-    func _applyCommitHook(_ callback: SQLiteCommitHookCallback?) {
+    fileprivate func _applyCommitHook(_ callback: SQLiteCommitHookCallback?) {
         // Persist (or clear) the Swift callback atomically.
         self.commitHookCallback.withLockedValue { $0 = callback }
 
@@ -301,7 +245,7 @@ extension SQLiteConnection {
     }
 
     /// Installs, replaces, or removes the C-level rollback hook and stores the Swift callback.
-    func _applyRollbackHook(_ callback: (@Sendable () -> Void)?) {
+    fileprivate func _applyRollbackHook(_ callback: SQLiteRollbackHookCallback?) {
         // Persist (or clear) the Swift callback atomically.
         self.rollbackHookCallback.withLockedValue { $0 = callback }
 
