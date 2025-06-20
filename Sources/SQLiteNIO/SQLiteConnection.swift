@@ -48,10 +48,8 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 ///   - **Commit hook** to observe (and optionally veto) transaction commits.
 ///   - **Rollback hook** to observe rollbacks.
 ///
-/// One hook slot per type (update/commit/rollback). `setTransactionHook` simply registers 
-/// both commit+rollback observers; you can still call `setCommitHook` individually if desired.
-/// Calling a given setter again (e.g. `setUpdateHook`) replaces only that hook
-/// (latest wins for that slot).
+/// One hook slot per type (update/commit/rollback). Calling a given setter again 
+/// (e.g. `setUpdateHook`) replaces only that hook (latest wins for that slot).
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.
     public enum Storage: Equatable, Sendable {
