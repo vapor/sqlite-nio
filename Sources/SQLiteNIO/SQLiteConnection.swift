@@ -1,3 +1,4 @@
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import CSQLite
@@ -39,6 +40,18 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 }
 
 /// Represents a single open connection to an SQLite database, either on disk or in memory.
+///
+/// ## Hook Management
+/// 
+/// Each connection supports separate SQLite hooks:
+///   - **Update hook** for row-level INSERT/UPDATE/DELETE events.
+///   - **Commit hook** to observe (and optionally veto) transaction commits.
+///   - **Rollback hook** to observe rollbacks.
+///
+/// One hook slot per type (update/commit/rollback). `setTransactionHook` simply registers 
+/// both commit+rollback observers; you can still call `setCommitHook` individually if desired.
+/// Calling a given setter again (e.g. `setUpdateHook`) replaces only that hook
+/// (latest wins for that slot).
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.
     public enum Storage: Equatable, Sendable {
@@ -163,7 +176,17 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     let handle: SQLiteConnectionHandle
     
     /// The thread pool used by this connection when calling libsqlite3 APIs.
-    private let threadPool: NIOThreadPool
+    let threadPool: NIOThreadPool
+    
+    /// The currently registered update hook callback.
+    let updateHookCallback = NIOLockedValueBox<SQLiteUpdateHookCallback?>(nil)
+    
+    /// The currently registered commit hook callback.
+    let commitHookCallback = NIOLockedValueBox<SQLiteCommitHookCallback?>(nil)
+    
+    /// The currently registered rollback hook callback.  
+    let rollbackHookCallback = NIOLockedValueBox<(@Sendable () -> Void)?>(nil)
+
     
     /// Initialize a new ``SQLiteConnection``. Internal use only.
     private init(
@@ -248,6 +271,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// - Returns: A future indicating completion of connection closure.
     public func close() -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            self._clearAllHooks()
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }
@@ -356,6 +380,7 @@ extension SQLiteConnection {
     /// No further operations may be performed on the connection after calling this method.
     public func close() async throws {
         try await self.threadPool.runIfActive {
+            self._clearAllHooks()
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }
