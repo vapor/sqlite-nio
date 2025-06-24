@@ -1,3 +1,4 @@
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import CSQLite
@@ -39,6 +40,17 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 }
 
 /// Represents a single open connection to an SQLite database, either on disk or in memory.
+///
+/// ## Hook Management
+/// 
+/// Each connection supports multiplexed SQLite hooks:
+///   - **Update hook** for row-level INSERT/UPDATE/DELETE events.
+///   - **Commit hook** to observe (and optionally veto) transaction commits.
+///   - **Rollback hook** to observe rollbacks.
+///   - **Authorizer hook** to control database access permissions.
+///
+/// Multiple observers can be registered for each hook type using `add*Observer()` methods.
+/// Each method returns a `SQLiteHookToken` that can be used to cancel the observer.
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.
     public enum Storage: Equatable, Sendable {
@@ -163,8 +175,11 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     let handle: SQLiteConnectionHandle
     
     /// The thread pool used by this connection when calling libsqlite3 APIs.
-    private let threadPool: NIOThreadPool
+    let threadPool: NIOThreadPool
     
+    /// Container for storing multiple observers per hook type.
+    let observerBuckets = NIOLockedValueBox<ObserverBuckets>(ObserverBuckets())
+
     /// Initialize a new ``SQLiteConnection``. Internal use only.
     private init(
         handle: OpaquePointer?,
@@ -248,6 +263,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// - Returns: A future indicating completion of connection closure.
     public func close() -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            self.clearAllHooks()
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }
@@ -356,6 +372,7 @@ extension SQLiteConnection {
     /// No further operations may be performed on the connection after calling this method.
     public func close() async throws {
         try await self.threadPool.runIfActive {
+            self.clearAllHooks()
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }
