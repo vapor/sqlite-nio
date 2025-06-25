@@ -127,25 +127,6 @@ public struct SQLiteAuthorizerEvent: Sendable {
     public let trigger: String?
 }
 
-// MARK: - Strongly-typed row identifier
-
-/// Wrapper around the raw `rowid` returned by SQLite.
-public struct SQLiteRowID: RawRepresentable, Equatable, Hashable, Sendable {
-    public let rawValue: Int64
-
-    public init(rawValue: Int64) {
-        self.rawValue = rawValue
-    }
-}
-
-public extension SQLiteUpdateEvent {
-    /// Convenience strongly-typed accessor. `rowID` (the `Int64`) remains
-    /// available for source compatibility.
-    var row: SQLiteRowID {
-        .init(rawValue: self.rowID)
-    }
-}
-
 // MARK: - Commit & Rollback events
 
 /// Event produced by the commit hook.
