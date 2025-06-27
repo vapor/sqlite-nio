@@ -242,7 +242,7 @@ extension SQLiteConnection {
         return SQLiteHookToken { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.update.removeValue(forKey: id) }
-            self.maybeUninstallDispatcher(kind: .update)
+            self.uninstallDispatcherIfNeeded(kind: .update)
         }
     }
 
@@ -269,7 +269,7 @@ extension SQLiteConnection {
         return SQLiteHookToken { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.commit.removeValue(forKey: id) }
-            self.maybeUninstallDispatcher(kind: .commit)
+            self.uninstallDispatcherIfNeeded(kind: .commit)
         }
     }
 
@@ -293,7 +293,7 @@ extension SQLiteConnection {
         return SQLiteHookToken { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.rollback.removeValue(forKey: id) }
-            self.maybeUninstallDispatcher(kind: .rollback)
+            self.uninstallDispatcherIfNeeded(kind: .rollback)
         }
     }
 
@@ -326,7 +326,7 @@ extension SQLiteConnection {
         return SQLiteHookToken { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.authorizer.removeValue(forKey: id) }
-            self.maybeUninstallDispatcher(kind: .authorizer)
+            self.uninstallDispatcherIfNeeded(kind: .authorizer)
         }
     }
 }
@@ -357,7 +357,7 @@ extension SQLiteConnection {
             return SQLiteHookToken { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.update.removeValue(forKey: id) }
-                self.maybeUninstallDispatcher(kind: .update)
+                self.uninstallDispatcherIfNeeded(kind: .update)
             }
         }
     }
@@ -386,7 +386,7 @@ extension SQLiteConnection {
             return SQLiteHookToken { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.commit.removeValue(forKey: id) }
-                self.maybeUninstallDispatcher(kind: .commit)
+                self.uninstallDispatcherIfNeeded(kind: .commit)
             }
         }
     }
@@ -412,7 +412,7 @@ extension SQLiteConnection {
             return SQLiteHookToken { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.rollback.removeValue(forKey: id) }
-                self.maybeUninstallDispatcher(kind: .rollback)
+                self.uninstallDispatcherIfNeeded(kind: .rollback)
             }
         }
     }
@@ -447,7 +447,7 @@ extension SQLiteConnection {
             return SQLiteHookToken { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.authorizer.removeValue(forKey: id) }
-                self.maybeUninstallDispatcher(kind: .authorizer)
+                self.uninstallDispatcherIfNeeded(kind: .authorizer)
             }
         }
     }
@@ -684,7 +684,7 @@ extension SQLiteConnection {
 
     /// Called after **removing** an observer to tear down the C-hook if nobody
     /// is listening any longer.
-    private func maybeUninstallDispatcher(kind: HookKind) {
+    private func uninstallDispatcherIfNeeded(kind: HookKind) {
         withBuckets { buckets in
             switch kind {
             case .update where buckets.update.isEmpty && buckets.updateDispatcherInstalled:
