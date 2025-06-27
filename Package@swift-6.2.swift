@@ -4,6 +4,87 @@ import PackageDescription
 let SQLiteTrait = "SQLite"
 let SQLCipherTrait = "SQLCipher"
 
+var dependencies: [Package.Dependency] = [
+    .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+    .package(url: "https://github.com/apple/swift-log.git", from: "1.5.4"),
+]
+
+// only on Apple platforms, add the binary OpenSSL XCFramework
+#if canImport(Darwin)
+dependencies.append(
+    .package(url: "https://github.com/krzyzanowskim/OpenSSL-Package.git", from: "3.3.3000")
+)
+#endif
+
+#if os(Linux)
+private let csqlcipherDependencies: [Target.Dependency] = [
+    // only on Linux do we link the system library:
+    .target(name: "COpenSSL")
+]
+#else
+private let csqlcipherDependencies: [Target.Dependency] = [
+    // on Apple platforms we use the vendored XCFramework:
+    .product(name: "OpenSSL", package: "OpenSSL-Package")
+]
+#endif
+
+var targets: [PackageDescription.Target] = [
+    .plugin(
+        name: "VendorSQLite",
+        capability: .command(
+            intent: .custom(verb: "vendor-sqlite", description: "Vendor SQLite"),
+            permissions: [
+                .allowNetworkConnections(scope: .all(ports: [443]), reason: "Retrieve the latest build of SQLite"),
+                .writeToPackageDirectory(reason: "Update the vendored SQLite files"),
+            ]
+        ),
+        exclude: ["001-warnings-and-data-race.patch"]
+    ),
+    .target(
+        name: "CSQLite",
+        cSettings: sqliteCSettings
+    ),
+    .target(
+        name: "CSQLCipher",
+        dependencies: csqlcipherDependencies,
+        cSettings: sqliteCSettings
+    ),
+    .target(
+        name: "SQLiteNIO",
+        dependencies: [
+            .target(name: "CSQLite", condition: .when(traits: [SQLiteTrait])),
+            .target(name: "CSQLCipher", condition: .when(traits: [SQLCipherTrait])),
+            .product(name: "Logging", package: "swift-log"),
+            .product(name: "NIOCore", package: "swift-nio"),
+            .product(name: "NIOPosix", package: "swift-nio"),
+            .product(name: "NIOFoundationCompat", package: "swift-nio"),
+        ],
+        swiftSettings: swiftSettings
+    ),
+    .testTarget(
+        name: "SQLiteNIOTests",
+        dependencies: [
+            .target(name: "SQLiteNIO"),
+        ],
+        swiftSettings: swiftSettings
+    ),
+]
+
+// only on Linux, add the COpenSSL system‐library target:
+#if os(Linux)
+targets.insert(
+    .systemLibrary(
+        name: "COpenSSL",
+        pkgConfig: "openssl",
+        providers: [
+            .apt(["libssl-dev"]),      // Debian & Ubuntu
+            .yum(["openssl-devel"]),   // AmazonLinux/RHEL
+        ]
+    ),
+    at: 2  // insert right after CSQLite
+)
+#endif
+
 let package = Package(
     name: "sqlite-nio",
     platforms: [
@@ -20,69 +101,8 @@ let package = Package(
         .trait(name: SQLCipherTrait, description: "Enable SQLCipher encryption support for encrypted databases"),
         .default(enabledTraits: [SQLiteTrait])
     ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.4"),
-        // Binary OpenSSL for Apple OSes (static, XCFramework)
-        .package(url: "https://github.com/krzyzanowskim/OpenSSL-Package.git", from: "3.3.3000")
-    ],
-    targets: [
-        .plugin(
-            name: "VendorSQLite",
-            capability: .command(
-                intent: .custom(verb: "vendor-sqlite", description: "Vendor SQLite"),
-                permissions: [
-                    .allowNetworkConnections(scope: .all(ports: [443]), reason: "Retrieve the latest build of SQLite"),
-                    .writeToPackageDirectory(reason: "Update the vendored SQLite files"),
-                ]
-            ),
-            exclude: ["001-warnings-and-data-race.patch"]
-        ),
-        .target(
-            name: "CSQLite",
-            cSettings: sqliteCSettings
-        ),
-        .systemLibrary(
-            name: "COpenSSL",
-            pkgConfig: "openssl",
-            providers: [
-                .apt(["libssl-dev"]),      // Debian & Ubuntu
-                .yum(["openssl-devel"]),   // AmazonLinux/RHEL
-            ]
-        ),
-        .target(
-            name: "CSQLCipher",
-            dependencies: [
-                // Linux: link against the system library
-                .target(name: "COpenSSL", condition: .when(platforms: [.linux])),
-                
-                // Apple OSes: link against the vendored binary product
-                .product(name: "OpenSSL",
-                         package: "OpenSSL-Package",
-                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
-            ],
-            cSettings: sqliteCSettings
-        ),
-        .target(
-            name: "SQLiteNIO",
-            dependencies: [
-                .target(name: "CSQLite", condition: .when(traits: [SQLiteTrait])),
-                .target(name: "CSQLCipher", condition: .when(traits: [SQLCipherTrait])),
-                .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
-            ],
-            swiftSettings: swiftSettings
-        ),
-        .testTarget(
-            name: "SQLiteNIOTests",
-            dependencies: [
-                .target(name: "SQLiteNIO"),
-            ],
-            swiftSettings: swiftSettings
-        ),
-    ]
+    dependencies: dependencies,
+    targets: targets
 )
 
 var swiftSettings: [SwiftSetting] { [
@@ -137,3 +157,4 @@ var sqliteCSettings: [CSetting] { [
     .define("SQLITE_EXTRA_SHUTDOWN", to: "sqlcipher_extra_shutdown", .when(traits: [SQLCipherTrait])),
     .define("SQLCIPHER_CRYPTO_OPENSSL", .when(traits: [SQLCipherTrait])),
 ] }
+
