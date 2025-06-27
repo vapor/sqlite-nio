@@ -1,7 +1,7 @@
 // swift-tools-version:6.2
 import PackageDescription
 
-// Trait to enable SQLCipher-specific code paths.
+let SQLiteTrait = "SQLite"
 let SQLCipherTrait = "SQLCipher"
 
 let package = Package(
@@ -16,10 +16,9 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"])
     ],
     traits: [
-        .trait(
-            name: SQLCipherTrait,
-            description: "Enable SQLCipher encryption support for encrypted databases"
-        )
+        .trait(name: SQLiteTrait, description: "Enable SQLite without encryption"),
+        .trait(name: SQLCipherTrait, description: "Enable SQLCipher encryption support for encrypted databases"),
+        .default(enabledTraits: [SQLiteTrait])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
@@ -67,7 +66,7 @@ let package = Package(
         .target(
             name: "SQLiteNIO",
             dependencies: [
-                .target(name: "CSQLite", condition: .when(traits: [])),
+                .target(name: "CSQLite", condition: .when(traits: [SQLiteTrait])),
                 .target(name: "CSQLCipher", condition: .when(traits: [SQLCipherTrait])),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
