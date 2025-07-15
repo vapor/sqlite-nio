@@ -40,31 +40,33 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testUpdateHookInsert() async throws {
         try await withOpenedConnection { db in
             let (updates, token) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
-            }; _ = token                                           // keep-alive
+                try await db.addUpdateObserver { event in Task { await box.append(event) } }
+            }
+            _ = token // Keep token alive for the duration of the test
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Alice')")
 
             await XCTAssertEqualAsync(await updates.count(), 1)
-            let ev = try await XCTUnwrapAsync(await updates.all().first)
-            XCTAssertEqual(ev.operation, .insert)
-            XCTAssertEqual(ev.table, "users")
-            XCTAssertEqual(ev.rowID, 1)
+            let event = try await XCTUnwrapAsync(await updates.all().first)
+            XCTAssertEqual(event.operation, .insert)
+            XCTAssertEqual(event.table, "users")
+            XCTAssertEqual(event.rowID, 1)
         }
     }
 
     func testUpdateHookCRUD() async throws {
         try await withOpenedConnection { db in
             let (updates, token) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
-            }; _ = token
+                try await db.addUpdateObserver { event in Task { await box.append(event) } }
+            }
+            _ = token // Keep token alive for the duration of the test
 
             // Execute statements separately to ensure hooks fire for each
-            try await db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)")
-            try await db.exec("INSERT INTO t(v) VALUES('A')")
-            try await db.exec("UPDATE t SET v='B' WHERE id=1")
-            try await db.exec("DELETE FROM t WHERE id=1")
+            try await db.exec("CREATE TABLE products(id INTEGER PRIMARY KEY, value TEXT)")
+            try await db.exec("INSERT INTO products(value) VALUES('A')")
+            try await db.exec("UPDATE products SET value='B' WHERE id=1")
+            try await db.exec("DELETE FROM products WHERE id=1")
 
             let ops = await updates.all().map(\.operation)
             await XCTAssertEqualAsync(ops, [.insert, .update, .delete])
@@ -74,12 +76,12 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testMultipleUpdateObservers() async throws {
         try await withOpenedConnection { db in
             let (c1, t1) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
+                try await db.addUpdateObserver { event in Task { await box.append(event) } }
             }
             let (c2, t2) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
+                try await db.addUpdateObserver { event in Task { await box.append(event) } }
             }
-            _ = (t1, t2)                                          // keep-alive
+            _ = (t1, t2) // Keep tokens alive for the duration of the test
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Bob')")
@@ -92,8 +94,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testUpdateObserverCancellation() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
-            let token   = try await db.addUpdateObserver { ev in
-                Task { await updates.append(ev) }
+            let token   = try await db.addUpdateObserver { event in
+                Task { await updates.append(event) }
             }
 
             try await makeUsersTable(in: db)
@@ -103,7 +105,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
             token.cancel()
             try await db.exec("INSERT INTO users(name) VALUES('Dana')")
             await XCTAssertEqualAsync(await updates.count(), 1)         // unchanged
-            _ = token                                             // silence warning
+            _ = token // Keep token alive (even though cancelled)
         }
     }
 
@@ -113,10 +115,11 @@ final class SQLiteConnectionHookTests: XCTestCase {
         try await withOpenedConnection { db in
             let (commits, token) = try await withCollector(db) { box in
                 try await db.addCommitObserver { _ in Task { await box.append(()) }; return abort }
-            }; _ = token
+            }
+            _ = token // Keep token alive for the duration of the test
 
             try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE x(id INT)")
+            try await db.exec("CREATE TABLE items(id INT)")
             if abort {
                 do {
                     try await db.exec("COMMIT")
@@ -141,10 +144,11 @@ final class SQLiteConnectionHookTests: XCTestCase {
                 try await db.addCommitObserver { _ in
                     Task { await box.append(()) }; return true
                 }
-            }; _ = token
+            }
+            _ = token // Keep token alive for the duration of the test
 
             try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE t(y INT)")
+            try await db.exec("CREATE TABLE orders(order_number INT)")
 
             do {
                 try await db.exec("COMMIT")
@@ -161,7 +165,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
         try await withOpenedConnection { db in
             let (rb, token) = try await withCollector(db) { box in
                 try await db.addRollbackObserver { _ in Task { await box.append(()) } }
-            }; _ = token
+            }
+            _ = token // Keep token alive for the duration of the test
 
             // Test explicit rollback
             try await db.exec("BEGIN")
@@ -169,7 +174,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
             // Test another explicit rollback (implicit rollback behavior varies)
             try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE t(id INT)")
+            try await db.exec("CREATE TABLE inventory(id INT)")
             try await db.exec("ROLLBACK")
 
             await XCTAssertEqualAsync(await rb.count(), 2)
@@ -180,47 +185,48 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     func testAuthorizerAllowIgnoreDeny() async throws {
         try await withOpenedConnection { db in
-            let token = try await db.addAuthorizerObserver { ev in
-                switch (ev.action, ev.parameter2) {
-                case (.read, "b"): return .deny
-                case (.read, "c"): return .ignore
+            let token = try await db.addAuthorizerObserver { event in
+                switch (event.action, event.parameter2) {
+                case (.read, "content"): return .deny
+                case (.read, "metadata"): return .ignore
                 default:           return .allow
                 }
-            }; _ = token
+            }
+            _ = token // Keep token alive for the duration of the test
 
-            try await db.exec("CREATE TABLE t(a INT, b INT, c INT)")
-            try await db.exec("INSERT INTO t VALUES(1,2,3)")
+            try await db.exec("CREATE TABLE documents(title INT, content INT, metadata INT)")
+            try await db.exec("INSERT INTO documents VALUES(1,2,3)")
 
             do {
-                _ = try await db.exec("SELECT b FROM t")
-                XCTFail("Expected SELECT b to fail due to authorizer denial")
+                _ = try await db.exec("SELECT content FROM documents")
+                XCTFail("Expected SELECT content to fail due to authorizer denial")
             } catch {
-                // Expected - authorizer denied access to column b
+                // Expected - authorizer denied access to column content
             }
 
-            let rows = try await db.exec("SELECT a, c FROM t")
+            let rows = try await db.exec("SELECT title, metadata FROM documents")
             let row  = try XCTUnwrap(rows.first)
-            XCTAssertEqual(row.column("a")?.integer, 1)
-            XCTAssertTrue(row.column("c")?.isNull ?? false)
+            XCTAssertEqual(row.column("title")?.integer, 1)
+            XCTAssertTrue(row.column("metadata")?.isNull ?? false)
         }
     }
 
     func testAuthorizerHookDisable() async throws {
         try await withOpenedConnection { db in
             let (events, token) = try await withCollector(db) { box in
-                try await db.addAuthorizerObserver { ev in
-                    Task { await box.append(ev) }; return .allow
+                try await db.addAuthorizerObserver { event in
+                    Task { await box.append(event) }; return .allow
                 }
             }
 
-            try await db.exec("CREATE TABLE t(a INT)")
-            try await db.exec("SELECT * FROM t")
+            try await db.exec("CREATE TABLE settings(value INT)")
+            try await db.exec("SELECT * FROM settings")
             let before = await events.count()
 
             token.cancel()
-            try await db.exec("SELECT * FROM t")
+            try await db.exec("SELECT * FROM settings")
             await XCTAssertEqualAsync(await events.count(), before)      // no growth
-            _ = token
+            _ = token // Keep token alive even after cancellation
         }
     }
 
@@ -229,7 +235,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testSimultaneousUpdateAndCommitHooks() async throws {
         try await withOpenedConnection { db in
             let (u, tu) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
+                try await db.addUpdateObserver { event in Task { await box.append(event) } }
             }
             let (c, tc) = try await withCollector(db) { box in
                 try await db.addCommitObserver { _ in Task { await box.append(()) }; return false }
@@ -237,8 +243,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
             _ = (tu, tc)
 
             try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE foo(x INT)")
-            try await db.exec("INSERT INTO foo VALUES(1)")
+            try await db.exec("CREATE TABLE transactions(amount INT)")
+            try await db.exec("INSERT INTO transactions VALUES(1)")
             try await db.exec("COMMIT")
 
             await XCTAssertEqualAsync(await u.count(), 1)
@@ -249,7 +255,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testObserverTokenDeinitCancels() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
-            var token: SQLiteHookToken? = try await db.addUpdateObserver { ev in Task { await updates.append(ev) } }
+            var token: SQLiteHookToken? = try await db.addUpdateObserver { event in Task { await updates.append(event) } }
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users VALUES(1,'Evan')")
@@ -258,7 +264,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
             token = nil                                            // drop reference
             try await db.exec("INSERT INTO users VALUES(2,'Fred')")
             await XCTAssertEqualAsync(await updates.count(), 1)
-            _ = token                                              // silence warning
+            _ = token // Silence warning for optional token variable
         }
     }
 
@@ -274,14 +280,15 @@ final class SQLiteConnectionHookTests: XCTestCase {
                     let should = await shouldRegister.all().first ?? false
                     if should {
                         await shouldRegister.append(false) // Clear the flag
-                        if let newToken = try? await db.addUpdateObserver({ ev in
-                            Task { await late.append(ev) }
+                        if let newToken = try? await db.addUpdateObserver({ event in
+                            Task { await late.append(event) }
                         }) {
                             await tokens.append(newToken)
                         }
                     }
                 }
-            }; _ = token
+            }
+            _ = token // Keep token alive for the duration of the test
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users VALUES(1,'Gina')")
@@ -301,14 +308,14 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testCommitObserversCheckedAfterUpdateHooks() async throws {
         try await withOpenedConnection { db in
             let (updates, token1) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
+                try await db.addUpdateObserver { event in Task { await box.append(event) } }
             }
             // Commit vetoer - always return true to veto
             let token2 = try await db.addCommitObserver { _ in true }
 
             try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE t(x INT)")   // inside txn
-            try await db.exec("INSERT INTO t VALUES(1)")
+            try await db.exec("CREATE TABLE logs(entry INT)")   // inside txn
+            try await db.exec("INSERT INTO logs VALUES(1)")
 
             do {
                 try await db.exec("COMMIT")
@@ -322,7 +329,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
             // Table should not exist after rollback
             do {
-                _ = try await db.exec("SELECT * FROM t")
+                _ = try await db.exec("SELECT * FROM logs")
                 XCTFail("Table should not exist after rollback")
             } catch {
                 // Expected - table was rolled back
@@ -337,16 +344,16 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testCancelStopsFurtherEvents() async throws {
         try await withOpenedConnection { db in
             let box = Box<SQLiteUpdateEvent>()
-            let tok = try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
+            let token = try await db.addUpdateObserver { event in Task { await box.append(event) } }
             try await makeUsersTable(in: db)
 
             try await db.exec("INSERT INTO users VALUES(1,'A')")
             await XCTAssertEqualAsync(await box.count(), 1)
 
-            tok.cancel()
+            token.cancel()
             try await db.exec("INSERT INTO users VALUES(2,'B')")
             await XCTAssertEqualAsync(await box.count(), 1)     // unchanged
-            _ = tok // Keep alive
+            _ = token // Keep alive
         }
     }
 
@@ -354,15 +361,15 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     func testIgnoreReturnsNull() async throws {
         try await withOpenedConnection { db in
-            let token = try await db.addAuthorizerObserver { ev in
-                (ev.action == .read && ev.parameter2 == "b") ? .ignore : .allow
+            let token = try await db.addAuthorizerObserver { event in
+                (event.action == .read && event.parameter2 == "secret") ? .ignore : .allow
             }
-            try await db.exec("CREATE TABLE t(a INT, b INT)")
-            try await db.exec("INSERT INTO t VALUES(1,2)")
-            let rows = try await db.exec("SELECT a,b FROM t")
+            try await db.exec("CREATE TABLE accounts(id INT, secret INT)")
+            try await db.exec("INSERT INTO accounts VALUES(1,2)")
+            let rows = try await db.exec("SELECT id,secret FROM accounts")
             let row = try XCTUnwrap(rows.first)
-            XCTAssertNil(row.column("b")?.integer)
-            _ = token // Keep alive
+            XCTAssertNil(row.column("secret")?.integer)
+            _ = token // Keep token alive for the duration of the test
         }
     }
 
@@ -373,9 +380,9 @@ final class SQLiteConnectionHookTests: XCTestCase {
             let (rb, token) = try await withCollector(db) { box in
                 try await db.addRollbackObserver { _ in Task { await box.append(()) } }
             }
-            try await db.exec("BEGIN; CREATE TABLE t(x INT); COMMIT")
+            try await db.exec("BEGIN; CREATE TABLE sessions(session_id INT); COMMIT")
             await XCTAssertEqualAsync(await rb.count(), 0)
-            _ = token // Keep alive
+            _ = token // Keep token alive for the duration of the test
         }
     }
 
@@ -384,14 +391,14 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testHundredRapidInserts() async throws {
         try await withOpenedConnection { db in
             let (updates, token) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { ev in Task { await box.append(ev) } }
+                try await db.addUpdateObserver { event in Task { await box.append(event) } }
             }
             try await makeUsersTable(in: db)
             for i in 0..<100 {
                 try await db.exec("INSERT INTO users(name) VALUES('user\(i)')")
             }
             await XCTAssertEqualAsync(await updates.count(), 100)
-            _ = token // Keep alive
+            _ = token // Keep token alive for the duration of the test
         }
     }
 

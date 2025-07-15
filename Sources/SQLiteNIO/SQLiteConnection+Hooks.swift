@@ -6,13 +6,22 @@ import CSQLite
 // MARK: - Hook Types and Events
 
 /// Represents the type of update operation that triggered the update hook.
-public enum SQLiteUpdateOperation: Int32, Sendable {
+public struct SQLiteUpdateOperation: Sendable, Hashable {
+    /// The raw SQLite operation code.
+    public let rawValue: Int32
+    
+    /// Creates a new SQLiteUpdateOperation with the given raw value.
+    /// For unknown values, this still creates an instance - use the static properties for known operations.
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+    
     /// An INSERT operation.
-    case insert = 18 // SQLITE_INSERT
+    public static let insert = SQLiteUpdateOperation(rawValue: 18) // SQLITE_INSERT
     /// An UPDATE operation.
-    case update = 23 // SQLITE_UPDATE
+    public static let update = SQLiteUpdateOperation(rawValue: 23) // SQLITE_UPDATE
     /// A DELETE operation.
-    case delete = 9  // SQLITE_DELETE
+    public static let delete = SQLiteUpdateOperation(rawValue: 9)  // SQLITE_DELETE
 }
 
 /// Event produced by the update hook.
@@ -30,75 +39,84 @@ public struct SQLiteUpdateEvent: Sendable {
 }
 
 /// Represents the type of database access being authorized.
-public enum SQLiteAuthorizerAction: Int32, Sendable {
+public struct SQLiteAuthorizerAction: Sendable, Hashable {
+    /// The raw SQLite action code.
+    public let rawValue: Int32
+    
+    /// Creates a new SQLiteAuthorizerAction with the given raw value.
+    /// For unknown values, this still creates an instance - use the static properties for known actions.
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+    
     /// Create index.
-    case createIndex = 1 // SQLITE_CREATE_INDEX
+    public static let createIndex = SQLiteAuthorizerAction(rawValue: 1) // SQLITE_CREATE_INDEX
     /// Create table.
-    case createTable = 2 // SQLITE_CREATE_TABLE
+    public static let createTable = SQLiteAuthorizerAction(rawValue: 2) // SQLITE_CREATE_TABLE
     /// Create temporary index.
-    case createTempIndex = 3 // SQLITE_CREATE_TEMP_INDEX
+    public static let createTempIndex = SQLiteAuthorizerAction(rawValue: 3) // SQLITE_CREATE_TEMP_INDEX
     /// Create temporary table.
-    case createTempTable = 4 // SQLITE_CREATE_TEMP_TABLE
+    public static let createTempTable = SQLiteAuthorizerAction(rawValue: 4) // SQLITE_CREATE_TEMP_TABLE
     /// Create temporary trigger.
-    case createTempTrigger = 5 // SQLITE_CREATE_TEMP_TRIGGER
+    public static let createTempTrigger = SQLiteAuthorizerAction(rawValue: 5) // SQLITE_CREATE_TEMP_TRIGGER
     /// Create temporary view.
-    case createTempView = 6 // SQLITE_CREATE_TEMP_VIEW
+    public static let createTempView = SQLiteAuthorizerAction(rawValue: 6) // SQLITE_CREATE_TEMP_VIEW
     /// Create trigger.
-    case createTrigger = 7 // SQLITE_CREATE_TRIGGER
+    public static let createTrigger = SQLiteAuthorizerAction(rawValue: 7) // SQLITE_CREATE_TRIGGER
     /// Create view.
-    case createView = 8 // SQLITE_CREATE_VIEW
+    public static let createView = SQLiteAuthorizerAction(rawValue: 8) // SQLITE_CREATE_VIEW
     /// Delete from table.
-    case delete = 9 // SQLITE_DELETE
+    public static let delete = SQLiteAuthorizerAction(rawValue: 9) // SQLITE_DELETE
     /// Drop index.
-    case dropIndex = 10 // SQLITE_DROP_INDEX
+    public static let dropIndex = SQLiteAuthorizerAction(rawValue: 10) // SQLITE_DROP_INDEX
     /// Drop table.
-    case dropTable = 11 // SQLITE_DROP_TABLE
+    public static let dropTable = SQLiteAuthorizerAction(rawValue: 11) // SQLITE_DROP_TABLE
     /// Drop temporary index.
-    case dropTempIndex = 12 // SQLITE_DROP_TEMP_INDEX
+    public static let dropTempIndex = SQLiteAuthorizerAction(rawValue: 12) // SQLITE_DROP_TEMP_INDEX
     /// Drop temporary table.
-    case dropTempTable = 13 // SQLITE_DROP_TEMP_TABLE
+    public static let dropTempTable = SQLiteAuthorizerAction(rawValue: 13) // SQLITE_DROP_TEMP_TABLE
     /// Drop temporary trigger.
-    case dropTempTrigger = 14 // SQLITE_DROP_TEMP_TRIGGER
+    public static let dropTempTrigger = SQLiteAuthorizerAction(rawValue: 14) // SQLITE_DROP_TEMP_TRIGGER
     /// Drop temporary view.
-    case dropTempView = 15 // SQLITE_DROP_TEMP_VIEW
+    public static let dropTempView = SQLiteAuthorizerAction(rawValue: 15) // SQLITE_DROP_TEMP_VIEW
     /// Drop trigger.
-    case dropTrigger = 16 // SQLITE_DROP_TRIGGER
+    public static let dropTrigger = SQLiteAuthorizerAction(rawValue: 16) // SQLITE_DROP_TRIGGER
     /// Drop view.
-    case dropView = 17 // SQLITE_DROP_VIEW
+    public static let dropView = SQLiteAuthorizerAction(rawValue: 17) // SQLITE_DROP_VIEW
     /// Insert into table.
-    case insert = 18 // SQLITE_INSERT
+    public static let insert = SQLiteAuthorizerAction(rawValue: 18) // SQLITE_INSERT
     /// Pragma statement.
-    case pragma = 19 // SQLITE_PRAGMA
+    public static let pragma = SQLiteAuthorizerAction(rawValue: 19) // SQLITE_PRAGMA
     /// Read from table/column.
-    case read = 20 // SQLITE_READ
+    public static let read = SQLiteAuthorizerAction(rawValue: 20) // SQLITE_READ
     /// Select statement.
-    case select = 21 // SQLITE_SELECT
+    public static let select = SQLiteAuthorizerAction(rawValue: 21) // SQLITE_SELECT
     /// Transaction operation.
-    case transaction = 22 // SQLITE_TRANSACTION
+    public static let transaction = SQLiteAuthorizerAction(rawValue: 22) // SQLITE_TRANSACTION
     /// Update table/column.
-    case update = 23 // SQLITE_UPDATE
+    public static let update = SQLiteAuthorizerAction(rawValue: 23) // SQLITE_UPDATE
     /// Attach database.
-    case attach = 24 // SQLITE_ATTACH
+    public static let attach = SQLiteAuthorizerAction(rawValue: 24) // SQLITE_ATTACH
     /// Detach database.
-    case detach = 25 // SQLITE_DETACH
+    public static let detach = SQLiteAuthorizerAction(rawValue: 25) // SQLITE_DETACH
     /// Alter table.
-    case alterTable = 26 // SQLITE_ALTER_TABLE
+    public static let alterTable = SQLiteAuthorizerAction(rawValue: 26) // SQLITE_ALTER_TABLE
     /// Reindex.
-    case reindex = 27 // SQLITE_REINDEX
+    public static let reindex = SQLiteAuthorizerAction(rawValue: 27) // SQLITE_REINDEX
     /// Analyze.
-    case analyze = 28 // SQLITE_ANALYZE
+    public static let analyze = SQLiteAuthorizerAction(rawValue: 28) // SQLITE_ANALYZE
     /// Create virtual table.
-    case createVTable = 29 // SQLITE_CREATE_VTABLE
+    public static let createVTable = SQLiteAuthorizerAction(rawValue: 29) // SQLITE_CREATE_VTABLE
     /// Drop virtual table.
-    case dropVTable = 30 // SQLITE_DROP_VTABLE
+    public static let dropVTable = SQLiteAuthorizerAction(rawValue: 30) // SQLITE_DROP_VTABLE
     /// Function call.
-    case function = 31 // SQLITE_FUNCTION
+    public static let function = SQLiteAuthorizerAction(rawValue: 31) // SQLITE_FUNCTION
     /// Savepoint operation.
-    case savepoint = 32 // SQLITE_SAVEPOINT
+    public static let savepoint = SQLiteAuthorizerAction(rawValue: 32) // SQLITE_SAVEPOINT
     /// Copy operation.
-    case copy = 33 // SQLITE_COPY
+    public static let copy = SQLiteAuthorizerAction(rawValue: 33) // SQLITE_COPY
     /// Recursive operation.
-    case recursive = 34 // SQLITE_RECURSIVE
+    public static let recursive = SQLiteAuthorizerAction(rawValue: 34) // SQLITE_RECURSIVE
 }
 
 /// The response from an authorizer callback.
@@ -711,24 +729,24 @@ extension SQLiteConnection {
 extension SQLiteConnection {
     fileprivate func applyUpdateHook(enabled: Bool) {
         if enabled {
-            let ctx = Unmanaged.passUnretained(self).toOpaque()
-            _ = sqlite_nio_sqlite3_update_hook(handle.raw, { ctx, op, db, tbl, row in
+            let context = Unmanaged.passUnretained(self).toOpaque()
+            _ = sqlite_nio_sqlite3_update_hook(handle.raw, { context, operation, database, table, row in
                 guard
-                    let ctx,
-                    let dbPtr = db,
-                    let tblPtr = tbl,
-                    let opEnum = SQLiteUpdateOperation(rawValue: op)
+                    let context,
+                    let databasePtr = database,
+                    let tablePtr = table
                 else { return }
-                let conn = Unmanaged<SQLiteConnection>.fromOpaque(ctx).takeUnretainedValue()
-                let event = SQLiteUpdateEvent(operation: opEnum,
-                                              database: String(cString: dbPtr),
-                                              table: String(cString: tblPtr),
+                let operationEnum = SQLiteUpdateOperation(rawValue: operation)
+                let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
+                let event = SQLiteUpdateEvent(operation: operationEnum,
+                                              database: String(cString: databasePtr),
+                                              table: String(cString: tablePtr),
                                               rowID: row)
                 // Dispatch to all registered update observers
-                conn.withBuckets { buckets in
+                connection.withBuckets { buckets in
                     buckets.update.values.forEach { $0(event) }
                 }
-            }, ctx)
+            }, context)
         } else {
             _ = sqlite_nio_sqlite3_update_hook(handle.raw, nil, nil)
         }
@@ -736,17 +754,17 @@ extension SQLiteConnection {
 
     fileprivate func applyCommitHook(enabled: Bool) {
         if enabled {
-            let ctx = Unmanaged.passUnretained(self).toOpaque()
-            _ = sqlite_nio_sqlite3_commit_hook(handle.raw, { ctx in
-                guard let ctx else { return 0 }
-                let conn = Unmanaged<SQLiteConnection>.fromOpaque(ctx).takeUnretainedValue()
+            let context = Unmanaged.passUnretained(self).toOpaque()
+            _ = sqlite_nio_sqlite3_commit_hook(handle.raw, { context in
+                guard let context else { return 0 }
+                let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
                 let event = SQLiteCommitEvent()
                 // Dispatch to all registered commit observers
-                let veto = conn.withBuckets { buckets in
+                let veto = connection.withBuckets { buckets in
                     buckets.commit.values.contains { $0(event) }
                 }
                 return veto ? 1 : 0
-            }, ctx)
+            }, context)
         } else {
             _ = sqlite_nio_sqlite3_commit_hook(handle.raw, nil, nil)
         }
@@ -754,16 +772,16 @@ extension SQLiteConnection {
 
     fileprivate func applyRollbackHook(enabled: Bool) {
         if enabled {
-            let ctx = Unmanaged.passUnretained(self).toOpaque()
-            sqlite_nio_sqlite3_rollback_hook(handle.raw, { ctx in
-                guard let ctx else { return }
-                let conn = Unmanaged<SQLiteConnection>.fromOpaque(ctx).takeUnretainedValue()
+            let context = Unmanaged.passUnretained(self).toOpaque()
+            sqlite_nio_sqlite3_rollback_hook(handle.raw, { context in
+                guard let context else { return }
+                let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
                 let event = SQLiteRollbackEvent()
                 // Dispatch to all registered rollback observers
-                conn.withBuckets { buckets in
+                connection.withBuckets { buckets in
                     buckets.rollback.values.forEach { $0(event) }
                 }
-            }, ctx)
+            }, context)
         } else {
             sqlite_nio_sqlite3_rollback_hook(handle.raw, nil, nil)
         }
@@ -771,17 +789,18 @@ extension SQLiteConnection {
 
     fileprivate func applyAuthorizerHook(enabled: Bool) {
         if enabled {
-            let ctx = Unmanaged.passUnretained(self).toOpaque()
-            _ = sqlite_nio_sqlite3_set_authorizer(handle.raw, { ctx, action, p1, p2, db, trg in
-                guard let ctx, let kind = SQLiteAuthorizerAction(rawValue: action) else { return 1 } // SQLITE_DENY
-                let conn = Unmanaged<SQLiteConnection>.fromOpaque(ctx).takeUnretainedValue()
-                let event = SQLiteAuthorizerEvent(action: kind,
-                                                  parameter1: p1.map { String(cString: $0) },
-                                                  parameter2: p2.map { String(cString: $0) },
-                                                  database: db.map { String(cString: $0) },
-                                                  trigger: trg.map { String(cString: $0) })
+            let context = Unmanaged.passUnretained(self).toOpaque()
+            _ = sqlite_nio_sqlite3_set_authorizer(handle.raw, { context, action, parameter1, parameter2, database, trigger in
+                guard let context else { return 1 } // SQLITE_DENY
+                let actionType = SQLiteAuthorizerAction(rawValue: action)
+                let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
+                let event = SQLiteAuthorizerEvent(action: actionType,
+                                                  parameter1: parameter1.map { String(cString: $0) },
+                                                  parameter2: parameter2.map { String(cString: $0) },
+                                                  database: database.map { String(cString: $0) },
+                                                  trigger: trigger.map { String(cString: $0) })
                 // Dispatch to all registered authorizer observers and aggregate results
-                let result = conn.withBuckets { buckets in
+                let result = connection.withBuckets { buckets in
                     // Aggregation rules: DENY > IGNORE > ALLOW
                     var result: SQLiteAuthorizerResponse = .allow
                     for response in buckets.authorizer.values.lazy.map({ $0(event) }) {
@@ -797,7 +816,7 @@ extension SQLiteConnection {
                     return result
                 }
                 return result.rawValue
-            }, ctx)
+            }, context)
         } else {
             _ = sqlite_nio_sqlite3_set_authorizer(handle.raw, nil, nil)
         }
