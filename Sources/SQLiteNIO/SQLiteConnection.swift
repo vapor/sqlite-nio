@@ -41,16 +41,52 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 
 /// Represents a single open connection to an SQLite database, either on disk or in memory.
 ///
-/// ## Hook Management
-/// 
-/// Each connection supports multiplexed SQLite hooks:
-///   - **Update hook** for row-level INSERT/UPDATE/DELETE events.
-///   - **Commit hook** to observe (and optionally veto) transaction commits.
-///   - **Rollback hook** to observe rollbacks.
-///   - **Authorizer hook** to control database access permissions.
+/// `SQLiteConnection` wraps a single `sqlite3*` handle and provides fully asynchronous,
+/// Swift-concurrency–friendly access to SQLite as well as a **multiplexed hook API** that
+/// lets you register *many* Swift observers even though SQLite exposes only one slot per
+/// hook in C.
 ///
-/// Multiple observers can be registered for each hook type using `add*Observer()` methods.
-/// Each method returns a `SQLiteHookToken` that can be used to cancel the observer.
+/// ### Storage
+/// Choose how the underlying database is created when opening a connection via
+/// ``SQLiteConnection/Storage``:
+/// - ``SQLiteConnection/Storage/memory`` – transient; lives only as long as the connection.
+///   Not shareable across processes (and, with `SQLITE_OMIT_SHARED_CACHE`, not across multiple
+///   connections in-process). Great for unit tests and scratch work.
+/// - ``SQLiteConnection/Storage/file(path:)`` – persisted on disk; can be opened by multiple
+///   connections/processes subject to SQLite locking rules. Prefer absolute paths.
+///
+/// ### Observable Hooks
+/// Each connection can fan out these SQLite hooks to multiple callbacks:
+/// - **Update** – row-level `INSERT` / `UPDATE` / `DELETE` events. See `addUpdateObserver(_:)`.
+/// - **Commit** – transaction about to commit; return `true` from *any* observer to veto
+///   (SQLite rolls the transaction back). See `addCommitObserver(_:)`.
+/// - **Rollback** – transaction was rolled back. See `addRollbackObserver(_:)`.
+/// - **Authorizer** – per-statement access control; aggregate result is *deny > ignore > allow*
+///   (`.deny` short-circuits). See `addAuthorizerObserver(_:)`.
+///
+/// ### Observer Registration Styles
+///
+/// | Style | API | Lifetime | Cleanup | Notes |
+/// |------|-----|----------|---------|-------|
+/// | RAII | `add…Observer` | Until ``SQLiteHookToken`` dealloc | `token.cancel()` optional | Most common; drop token to stop. |
+/// | Persistent | `install…Observer` | Until `removeObserver(_:)` *or* connection close | Keep ``SQLiteObserverID`` | Discard ID (`_ = …`) for connection-lifetime observer. |
+/// | Scoped | `with…Observer` | Active only for closure duration | Auto | Handy for tests / temporary instrumentation. |
+///
+/// ### Threading
+/// Registration is thread-safe. **Callbacks run on SQLite’s internal thread**, not your event
+/// loop or actor. Hop if needed:
+///
+/// ```swift
+/// let token = try await db.addUpdateObserver { event in
+///     Task { await myActor.handle(event) }   // hop to actor
+/// }
+/// ```
+///
+/// ### Cleanup
+/// - Dropping a ``SQLiteHookToken`` auto-cancels (idempotent).
+/// - Call `removeObserver(_:)` to stop a persistent observer early.
+/// - All observers are torn down automatically when the connection closes; later cancels are safe.
+///
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.
     public enum Storage: Equatable, Sendable {
