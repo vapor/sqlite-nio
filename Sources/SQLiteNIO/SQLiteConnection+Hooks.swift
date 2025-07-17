@@ -3,16 +3,6 @@ import NIOConcurrencyHelpers
 import NIOCore
 import CSQLite
 
-// MARK: - Observer API Overview
-
-/// ## SQLite Observer API Summary
-///
-/// | API | Lifetime | Auto-cleanup? | Needs Retention? | Cancel Method |
-/// |-----|----------|---------------|------------------|---------------|
-/// | `add…Observer` | RAII | Yes (token deinit) | Retain ``SQLiteHookToken`` | `token.cancel()` |
-/// | `install…Observer` | Persistent | No | Retain ``SQLiteObserverID`` if you intend to remove | `removeObserver` |
-/// | `with…Observer` | Scoped | Auto (defer cancel) | No (internal) | _N/A_ |
-
 // MARK: - Hook Types and Events
 
 /// Represents the type of update operation that triggered the update hook.
@@ -216,7 +206,7 @@ extension SQLiteConnection {
 public final class SQLiteHookToken: Sendable {
     private let cancelBlock: @Sendable () -> Void
 
-    internal init(cancel: @escaping @Sendable () -> Void) {
+    fileprivate init(cancel: @escaping @Sendable () -> Void) {
         self.cancelBlock = cancel
     }
 
@@ -242,11 +232,11 @@ public final class SQLiteHookToken: Sendable {
 /// Unlike ``SQLiteHookToken``, this identifier does **not** automatically clean up
 /// when deallocated—you must explicitly call `removeObserver(_:)`.
 public struct SQLiteObserverID: Sendable, Hashable {
-    internal let uuid: UUID
+    let uuid: UUID
     /// The type of hook this observer ID represents.
     public let type: SQLiteConnection.HookKind
 
-    internal init(type: SQLiteConnection.HookKind) {
+    fileprivate init(type: SQLiteConnection.HookKind) {
         self.uuid = UUID()
         self.type = type
     }
@@ -477,7 +467,7 @@ extension SQLiteConnection {
     /// let token = connection.addUpdateObserver { event in
     ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// token.cancel()
     /// ```
     ///
@@ -601,7 +591,7 @@ extension SQLiteConnection {
     /// let token = try await connection.addUpdateObserver { event in
     ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// token.cancel()
     /// ```
     ///
@@ -735,7 +725,7 @@ extension SQLiteConnection {
     /// let id = connection.installUpdateObserver { event in
     ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// connection.removeObserver(id)
     /// ```
     ///
@@ -775,7 +765,7 @@ extension SQLiteConnection {
     ///     print("Commit attempted at \(event.date)")
     ///     return false // Allow commit to proceed
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// connection.removeObserver(id)
     /// ```
     ///
@@ -812,7 +802,7 @@ extension SQLiteConnection {
     /// let id = connection.installRollbackObserver { event in
     ///     print("Transaction was rolled back at \(event.date)")
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// connection.removeObserver(id)
     /// ```
     ///
@@ -858,7 +848,7 @@ extension SQLiteConnection {
     ///     }
     ///     return .allow
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// connection.removeObserver(id)
     /// ```
     ///
@@ -927,7 +917,7 @@ extension SQLiteConnection {
     /// let id = try await connection.installUpdateObserver { event in
     ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// try await connection.removeObserver(id)
     /// ```
     ///
@@ -969,7 +959,7 @@ extension SQLiteConnection {
     ///     print("Commit attempted at \(event.date)")
     ///     return false // Allow commit to proceed
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// try await connection.removeObserver(id)
     /// ```
     ///
@@ -1008,7 +998,7 @@ extension SQLiteConnection {
     /// let id = try await connection.installRollbackObserver { event in
     ///     print("Transaction was rolled back at \(event.date)")
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// try await connection.removeObserver(id)
     /// ```
     ///
@@ -1056,7 +1046,7 @@ extension SQLiteConnection {
     ///     }
     ///     return .allow
     /// }
-    /// // ...later
+    /// // Clean up the observer when no longer needed:
     /// try await connection.removeObserver(id)
     /// ```
     ///
@@ -1273,7 +1263,7 @@ extension SQLiteConnection {
                 for response in callbacks.map({ $0(event) }) {
                     switch response {
                     case .deny:
-                        return SQLiteAuthorizerResponse.deny.rawValue    // short-circuit
+                        return SQLiteAuthorizerResponse.deny.rawValue // short-circuit
                     case .ignore:
                         result = .ignore // keep going; maybe someone denies
                     case .allow:

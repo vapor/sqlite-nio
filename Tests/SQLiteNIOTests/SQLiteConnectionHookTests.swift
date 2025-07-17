@@ -76,6 +76,119 @@ final class SQLiteConnectionHookTests: XCTestCase {
         }
     }
 
+    // MARK: Commit / Rollback
+
+    private func assertCommit(abort: Bool) async throws {
+        try await withOpenedConnection { db in
+            let (commits, token) = try await withCollector(db) { box in
+                try await db.addCommitObserver { _ in box.append(()); return abort }
+            }
+            _ = token
+
+            try await db.exec("BEGIN")
+            try await db.exec("CREATE TABLE items(id INT)")
+            if abort {
+                do {
+                    try await db.exec("COMMIT")
+                    XCTFail("Expected COMMIT to fail due to observer veto")
+                } catch {
+                    // expected
+                }
+            } else {
+                try await db.exec("COMMIT")
+            }
+            XCTAssertEqual(commits.count(), 1)
+        }
+    }
+
+    func testCommitHookAllow()  async throws { try await assertCommit(abort: false) }
+    func testCommitHookAbort()  async throws { try await assertCommit(abort: true ) }
+
+    func testCommitObserversAggregateVeto() async throws {
+        try await withOpenedConnection { db in
+            _ = try await db.addCommitObserver { _ in false } // token dropped; auto-cancelled
+            let (vetoes, token) = try await withCollector(db) { box in
+                try await db.addCommitObserver { _ in box.append(()); return true }
+            }
+            _ = token
+
+            try await db.exec("BEGIN")
+            try await db.exec("CREATE TABLE orders(order_number INT)")
+            do {
+                try await db.exec("COMMIT")
+                XCTFail("Expected COMMIT to fail due to observer veto")
+            } catch {
+                // expected
+            }
+            XCTAssertEqual(vetoes.count(), 1)
+        }
+    }
+
+    func testRollbackHookExplicitAndImplicit() async throws {
+        try await withOpenedConnection { db in
+            let (rb, token) = try await withCollector(db) { box in
+                try await db.addRollbackObserver { _ in box.append(()) }
+            }
+            _ = token
+
+            try await db.exec("BEGIN")
+            try await db.exec("ROLLBACK")
+
+            try await db.exec("BEGIN")
+            try await db.exec("CREATE TABLE inventory(id INT)")
+            try await db.exec("ROLLBACK")
+
+            XCTAssertEqual(rb.count(), 2)
+        }
+    }
+
+    // MARK: Authorizer
+
+    func testAuthorizerAllowIgnoreDeny() async throws {
+        try await withOpenedConnection { db in
+            let token = try await db.addAuthorizerObserver { event in
+                switch (event.action, event.parameter2) {
+                case (.read, "content"): return .deny
+                case (.read, "metadata"): return .ignore
+                default:                  return .allow
+                }
+            }
+            _ = token
+
+            try await db.exec("CREATE TABLE documents(title INT, content INT, metadata INT)")
+            try await db.exec("INSERT INTO documents VALUES(1,2,3)")
+
+            do {
+                _ = try await db.exec("SELECT content FROM documents")
+                XCTFail("Expected SELECT content to fail due to authorizer denial")
+            } catch {
+                // expected
+            }
+
+            let rows = try await db.exec("SELECT title, metadata FROM documents")
+            let row  = try XCTUnwrap(rows.first)
+            XCTAssertEqual(row.column("title")?.integer, 1)
+            XCTAssertTrue(row.column("metadata")?.isNull ?? false)
+        }
+    }
+
+    func testAuthorizerHookDisable() async throws {
+        try await withOpenedConnection { db in
+            let (events, token) = try await withCollector(db) { box in
+                try await db.addAuthorizerObserver { event in box.append(event); return .allow }
+            }
+
+            try await db.exec("CREATE TABLE settings(value INT)")
+            try await db.exec("SELECT * FROM settings")
+            let before = events.count()
+
+            token.cancel()
+            try await db.exec("SELECT * FROM settings")
+            XCTAssertEqual(events.count(), before) // no growth
+            _ = token // Keep token alive even after cancellation
+        }
+    }
+
     // MARK: Persistent Observers
 
     func testPersistentUpdateObserver() async throws {
@@ -234,119 +347,6 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
             try await db.exec("INSERT INTO users(name) VALUES('Bob')")
             XCTAssertEqual(updates.count(), 1) // unchanged
-        }
-    }
-
-    // MARK: Commit / Rollback
-
-    private func assertCommit(abort: Bool) async throws {
-        try await withOpenedConnection { db in
-            let (commits, token) = try await withCollector(db) { box in
-                try await db.addCommitObserver { _ in box.append(()); return abort }
-            }
-            _ = token
-
-            try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE items(id INT)")
-            if abort {
-                do {
-                    try await db.exec("COMMIT")
-                    XCTFail("Expected COMMIT to fail due to observer veto")
-                } catch {
-                    // expected
-                }
-            } else {
-                try await db.exec("COMMIT")
-            }
-            XCTAssertEqual(commits.count(), 1)
-        }
-    }
-
-    func testCommitHookAllow()  async throws { try await assertCommit(abort: false) }
-    func testCommitHookAbort()  async throws { try await assertCommit(abort: true ) }
-
-    func testCommitObserversAggregateVeto() async throws {
-        try await withOpenedConnection { db in
-            _ = try await db.addCommitObserver { _ in false } // token dropped; auto-cancelled
-            let (vetoes, token) = try await withCollector(db) { box in
-                try await db.addCommitObserver { _ in box.append(()); return true }
-            }
-            _ = token
-
-            try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE orders(order_number INT)")
-            do {
-                try await db.exec("COMMIT")
-                XCTFail("Expected COMMIT to fail due to observer veto")
-            } catch {
-                // expected
-            }
-            XCTAssertEqual(vetoes.count(), 1)
-        }
-    }
-
-    func testRollbackHookExplicitAndImplicit() async throws {
-        try await withOpenedConnection { db in
-            let (rb, token) = try await withCollector(db) { box in
-                try await db.addRollbackObserver { _ in box.append(()) }
-            }
-            _ = token
-
-            try await db.exec("BEGIN")
-            try await db.exec("ROLLBACK")
-
-            try await db.exec("BEGIN")
-            try await db.exec("CREATE TABLE inventory(id INT)")
-            try await db.exec("ROLLBACK")
-
-            XCTAssertEqual(rb.count(), 2)
-        }
-    }
-
-    // MARK: Authorizer
-
-    func testAuthorizerAllowIgnoreDeny() async throws {
-        try await withOpenedConnection { db in
-            let token = try await db.addAuthorizerObserver { event in
-                switch (event.action, event.parameter2) {
-                case (.read, "content"): return .deny
-                case (.read, "metadata"): return .ignore
-                default:                  return .allow
-                }
-            }
-            _ = token
-
-            try await db.exec("CREATE TABLE documents(title INT, content INT, metadata INT)")
-            try await db.exec("INSERT INTO documents VALUES(1,2,3)")
-
-            do {
-                _ = try await db.exec("SELECT content FROM documents")
-                XCTFail("Expected SELECT content to fail due to authorizer denial")
-            } catch {
-                // expected
-            }
-
-            let rows = try await db.exec("SELECT title, metadata FROM documents")
-            let row  = try XCTUnwrap(rows.first)
-            XCTAssertEqual(row.column("title")?.integer, 1)
-            XCTAssertTrue(row.column("metadata")?.isNull ?? false)
-        }
-    }
-
-    func testAuthorizerHookDisable() async throws {
-        try await withOpenedConnection { db in
-            let (events, token) = try await withCollector(db) { box in
-                try await db.addAuthorizerObserver { event in box.append(event); return .allow }
-            }
-
-            try await db.exec("CREATE TABLE settings(value INT)")
-            try await db.exec("SELECT * FROM settings")
-            let before = events.count()
-
-            token.cancel()
-            try await db.exec("SELECT * FROM settings")
-            XCTAssertEqual(events.count(), before) // no growth
-            _ = token // Keep token alive even after cancellation
         }
     }
 
