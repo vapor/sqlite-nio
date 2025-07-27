@@ -27,7 +27,7 @@ public struct SQLiteUpdateOperation: Sendable, Hashable {
 /// Event produced by the update hook.
 ///
 /// Contains information about a database modification operation that triggered an update hook.
-public struct SQLiteUpdateEvent: Sendable {
+public struct SQLiteUpdateEvent: Sendable, Hashable {
     /// The type of database operation that was performed.
     public let operation: SQLiteUpdateOperation
     /// The name of the database that was modified.
@@ -120,7 +120,7 @@ public struct SQLiteAuthorizerAction: Sendable, Hashable {
 }
 
 /// The response from an authorizer callback.
-public enum SQLiteAuthorizerResponse: Int32, Sendable {
+public enum SQLiteAuthorizerResponse: Int32, Sendable, Hashable {
     /// Allow the operation.
     case allow = 0 // SQLITE_OK
     /// Deny the operation.
@@ -132,7 +132,7 @@ public enum SQLiteAuthorizerResponse: Int32, Sendable {
 /// Event produced by the authorizer hook.
 ///
 /// Contains information about a database access attempt that requires authorization.
-public struct SQLiteAuthorizerEvent: Sendable {
+public struct SQLiteAuthorizerEvent: Sendable, Hashable {
     /// The type of database access being attempted.
     public let action: SQLiteAuthorizerAction
     /// The first parameter (meaning depends on action).
@@ -148,7 +148,7 @@ public struct SQLiteAuthorizerEvent: Sendable {
 /// Event produced by the commit hook.
 ///
 /// Contains information about a transaction commit that is about to occur.
-public struct SQLiteCommitEvent: Sendable {
+public struct SQLiteCommitEvent: Sendable, Hashable {
     /// Timestamp (in the connection's wall-clock) when the commit was about to occur.
     public let date: Date = Date()
 }
@@ -156,7 +156,7 @@ public struct SQLiteCommitEvent: Sendable {
 /// Event produced by the rollback hook.
 ///
 /// Contains information about a transaction rollback that has occurred.
-public struct SQLiteRollbackEvent: Sendable {
+public struct SQLiteRollbackEvent: Sendable, Hashable {
     /// Timestamp (in the connection's wall-clock) when the rollback happened.
     public let date: Date = Date()
 }
@@ -165,7 +165,7 @@ public struct SQLiteRollbackEvent: Sendable {
 
 extension SQLiteConnection {
     /// Represents the different types of database hooks available.
-    public enum HookKind: Sendable {
+    public enum HookKind: Sendable, Hashable {
         /// Update hook (fired on INSERT, UPDATE, DELETE operations)
         case update
         /// Commit hook (fired before transaction commits)
@@ -203,7 +203,8 @@ extension SQLiteConnection {
 /// Hook tokens automatically cancel themselves when deallocated, ensuring that
 /// callbacks are cleaned up even if you never call `cancel()` explicitly.
 /// Calling `cancel()` after the connection has been closed is a no-op.
-public final class SQLiteHookToken: Sendable {
+public final class SQLiteHookToken: Sendable, Hashable {
+    private let id = UUID()
     private let cancelBlock: @Sendable () -> Void
 
     fileprivate init(cancel: @escaping @Sendable () -> Void) {
@@ -220,6 +221,16 @@ public final class SQLiteHookToken: Sendable {
 
     deinit {
         cancelBlock()
+    }
+
+    // MARK: - Hashable
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    public static func == (lhs: SQLiteHookToken, rhs: SQLiteHookToken) -> Bool {
+        lhs.id == rhs.id
     }
 }
 
