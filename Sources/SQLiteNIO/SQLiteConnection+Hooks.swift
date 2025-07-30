@@ -185,7 +185,7 @@ extension SQLiteConnection {
     }
 }
 
-/// Returned by every `add…Observer` call (sync **or** async; update / commit / rollback / authorizer). Call
+/// Returned by every `add…Observer` and `set…Validator` call (sync **or** async; update / commit / rollback / authorizer). Call
 /// `cancel()` to unregister its associated callback.
 ///
 /// - Important: **Token cleanup behavior**
@@ -251,8 +251,6 @@ public final class SQLiteHookToken: Sendable, Hashable {
     }
 }
 
-
-
 // MARK: - Type Aliases
 
 extension SQLiteConnection {
@@ -294,8 +292,8 @@ extension SQLiteConnection {
     /// The type signature for authorizer observer callbacks.
     ///
     /// Authorizer observers perform pure observation (logging, metrics, auditing) without
-    /// the ability to influence access control decisions. They are notified only after
-    /// the authorizer validator (if any) has approved the operation.
+    /// the ability to influence access control decisions. They are notified only if
+    /// the authorizer validator (if any) has not denied the operation.
     ///
     /// - Parameter event: A ``SQLiteAuthorizerEvent`` containing details about the access attempt.
     ///
@@ -312,8 +310,6 @@ extension SQLiteConnection {
     ///
     /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
     public typealias SQLiteAuthorizerValidator = @Sendable (SQLiteAuthorizerEvent) -> SQLiteAuthorizerResponse
-
-
 }
 
 // MARK: - Scoped Observers (Automatic Cleanup)
@@ -636,8 +632,8 @@ extension SQLiteConnection {
     /// Register an observer for the SQLite *authorizer* hook.
     ///
     /// Authorizer observers perform pure observation (logging, metrics, auditing)
-    /// without influencing access control decisions. They are notified only after
-    /// the authorizer validator (if any) has approved the operation.
+    /// without influencing access control decisions. They are notified only if
+    /// the authorizer validator (if any) has not denied the operation.
     ///
     /// ```swift
     /// let token = connection.addAuthorizerObserver { event in
@@ -820,8 +816,8 @@ extension SQLiteConnection {
     /// Register an observer for the SQLite *authorizer* hook (async version).
     ///
     /// Authorizer observers perform pure observation (logging, metrics, auditing)
-    /// without influencing access control decisions. They are notified only after
-    /// the authorizer validator (if any) has approved the operation.
+    /// without influencing access control decisions. They are notified only if
+    /// the authorizer validator (if any) has not denied the operation.
     ///
     /// ```swift
     /// let token = try await connection.addAuthorizerObserver { event in
