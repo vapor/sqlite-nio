@@ -1,7 +1,12 @@
 import NIOCore
 import NIOPosix
-import CSQLite
 import Logging
+
+#if SQLCipher
+import CSQLCipher
+#else
+import CSQLite
+#endif
 
 /// A protocol describing the minimum requirements for an object allowing access to a generic SQLite database.
 ///
