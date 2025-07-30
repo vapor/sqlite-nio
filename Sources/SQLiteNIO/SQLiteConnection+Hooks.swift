@@ -119,6 +119,14 @@ public struct SQLiteAuthorizerAction: Sendable, Hashable {
     public static let recursive = SQLiteAuthorizerAction(rawValue: SQLITE_RECURSIVE)
 }
 
+/// The response from a commit hook callback.
+public enum SQLiteCommitResponse: Sendable, Hashable {
+    /// Allow the commit to proceed.
+    case allow
+    /// Deny the commit (causes transaction rollback).
+    case deny
+}
+
 /// The response from an authorizer callback.
 public enum SQLiteAuthorizerResponse: Int32, Sendable, Hashable {
     /// Allow the operation.
@@ -266,10 +274,10 @@ extension SQLiteConnection {
     /// The type signature for commit hook callbacks.
     ///
     /// - Parameter event: A ``SQLiteCommitEvent`` containing details about the commit attempt.
-    /// - Returns: `true` to abort the commit, `false` to allow it to proceed.
+    /// - Returns: A ``SQLiteCommitResponse`` indicating whether to allow or deny the commit.
     ///
     /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
-    public typealias SQLiteCommitHookCallback = @Sendable (SQLiteCommitEvent) -> Bool
+    public typealias SQLiteCommitHookCallback = @Sendable (SQLiteCommitEvent) -> SQLiteCommitResponse
 
     /// The type signature for rollback hook callbacks.
     ///
@@ -500,14 +508,14 @@ extension SQLiteConnection {
     /// Register an observer for the SQLite *commit* hook.
     ///
     /// Fired whenever a transaction is about to be committed. All registered
-    /// observers are invoked. If **any** observer returns `true`, the commit is
+    /// observers are invoked. If **any** observer returns `.deny`, the commit is
     /// aborted and the transaction is rolled back.
     ///
     /// ```swift
     /// let token = connection.addCommitObserver { event in
     ///     // Perform validation logic here
     ///     print("Commit attempted at \(event.date)")
-    ///     return false // Allow commit to proceed
+    ///     return .allow // Allow commit to proceed
     /// }
     /// ```
     ///
@@ -626,14 +634,14 @@ extension SQLiteConnection {
     /// Register an observer for the SQLite *commit* hook.
     ///
     /// Fired whenever a transaction is about to be committed. All registered
-    /// observers are invoked. If **any** observer returns `true`, the commit is
+    /// observers are invoked. If **any** observer returns `.deny`, the commit is
     /// aborted and the transaction is rolled back.
     ///
     /// ```swift
     /// let token = try await connection.addCommitObserver { event in
     ///     // Perform validation logic here
     ///     print("Commit attempted at \(event.date)")
-    ///     return false // Allow commit to proceed
+    ///     return .allow // Allow commit to proceed
     /// }
     /// ```
     ///
@@ -767,14 +775,14 @@ extension SQLiteConnection {
     /// returned ``SQLiteObserverID`` is deallocated.
     ///
     /// The commit hook is invoked whenever a transaction is about to be committed.
-    /// All registered observers are invoked. If **any** observer returns `true`,
+    /// All registered observers are invoked. If **any** observer returns `.deny`,
     /// the commit is aborted and the transaction is rolled back.
     ///
     /// ```swift
     /// let id = connection.installCommitObserver { event in
     ///     // Perform validation logic here
     ///     print("Commit attempted at \(event.date)")
-    ///     return false // Allow commit to proceed
+    ///     return .allow // Allow commit to proceed
     /// }
     /// // Clean up the observer when no longer needed:
     /// connection.removeObserver(id)
@@ -961,14 +969,14 @@ extension SQLiteConnection {
     /// returned ``SQLiteObserverID`` is deallocated.
     ///
     /// The commit hook is invoked whenever a transaction is about to be committed.
-    /// All registered observers are invoked. If **any** observer returns `true`,
+    /// All registered observers are invoked. If **any** observer returns `.deny`,
     /// the commit is aborted and the transaction is rolled back.
     ///
     /// ```swift
     /// let id = try await connection.installCommitObserver { event in
     ///     // Perform validation logic here
     ///     print("Commit attempted at \(event.date)")
-    ///     return false // Allow commit to proceed
+    ///     return .allow // Allow commit to proceed
     /// }
     /// // Clean up the observer when no longer needed:
     /// try await connection.removeObserver(id)
@@ -1230,7 +1238,7 @@ extension SQLiteConnection {
                 // Run all observers so side-effects (logging, metrics) occur even if a prior observer vetoes.
                 var veto = false
                 for cb in callbacks {
-                    if cb(event) { veto = true }
+                    if cb(event) == .deny { veto = true }
                 }
                 return veto ? 1 : 0
             }, context)

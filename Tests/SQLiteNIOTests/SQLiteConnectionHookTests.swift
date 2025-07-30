@@ -81,7 +81,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     private func assertCommit(abort: Bool) async throws {
         try await withOpenedConnection { db in
             let (commits, token) = try await withCollector(db) { box in
-                try await db.addCommitObserver { _ in box.append(()); return abort }
+                try await db.addCommitObserver { _ in box.append(()); return abort ? .deny : .allow }
             }
             _ = token
 
@@ -106,9 +106,9 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     func testCommitObserversAggregateVeto() async throws {
         try await withOpenedConnection { db in
-            _ = try await db.addCommitObserver { _ in false } // token dropped; auto-cancelled
+            _ = try await db.addCommitObserver { _ in .allow } // token dropped; auto-cancelled
             let (vetoes, token) = try await withCollector(db) { box in
-                try await db.addCommitObserver { _ in box.append(()); return true }
+                try await db.addCommitObserver { _ in box.append(()); return .deny }
             }
             _ = token
 
@@ -211,7 +211,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testPersistentCommitObserver() async throws {
         try await withOpenedConnection { db in
             let commits = Box<Void>()
-            let observerID = try await db.installCommitObserver { _ in commits.append(()); return false }
+            let observerID = try await db.installCommitObserver { _ in commits.append(()); return .allow }
 
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE items(id INT)")
@@ -300,7 +300,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
             let rollbacks = Box<Void>()
 
             let updateID = try await db.installUpdateObserver { event in updates.append(event) }
-            let commitID = try await db.installCommitObserver { _ in commits.append(()); return false }
+            let commitID = try await db.installCommitObserver { _ in commits.append(()); return .allow }
             let rollbackID = try await db.installRollbackObserver { _ in rollbacks.append(()) }
 
             try await db.exec("BEGIN")
@@ -358,7 +358,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
                 try await db.addUpdateObserver { event in box.append(event) }
             }
             let (c, tc) = try await withCollector(db) { box in
-                try await db.addCommitObserver { _ in box.append(()); return false }
+                try await db.addCommitObserver { _ in box.append(()); return .allow }
             }
             _ = (tu, tc)
 
@@ -395,8 +395,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
             let (updates, token1) = try await withCollector(db) { box in
                 try await db.addUpdateObserver { event in box.append(event) }
             }
-            // Commit vetoer - always return true to veto
-            let token2 = try await db.addCommitObserver { _ in true }
+            // Commit vetoer - always return .deny to veto
+            let token2 = try await db.addCommitObserver { _ in .deny }
 
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE logs(entry INT)") // inside txn
@@ -529,8 +529,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
         try await withOpenedConnection { db in
             let runCount = Box<Void>()
 
-            let token1 = try await db.addCommitObserver { _ in runCount.append(()); return true  } // veto
-            let token2 = try await db.addCommitObserver { _ in runCount.append(()); return false }
+            let token1 = try await db.addCommitObserver { _ in runCount.append(()); return .deny  } // veto
+            let token2 = try await db.addCommitObserver { _ in runCount.append(()); return .allow }
             _ = (token1, token2)
 
             try await db.exec("BEGIN")
