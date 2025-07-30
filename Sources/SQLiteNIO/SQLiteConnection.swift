@@ -58,18 +58,17 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 /// ### Observable Hooks
 /// Each connection can fan out these SQLite hooks to multiple callbacks:
 /// - **Update** – row-level `INSERT` / `UPDATE` / `DELETE` events. See `addUpdateObserver(_:)`.
-/// - **Commit** – transaction about to commit; return `true` from *any* observer to veto
-///   (SQLite rolls the transaction back). See `addCommitObserver(_:)`.
+/// - **Commit** – transaction about to commit; use `setCommitValidator(_:)` to veto commits
+///   or `addCommitObserver(_:)` for side-effect-only observation.
 /// - **Rollback** – transaction was rolled back. See `addRollbackObserver(_:)`.
-/// - **Authorizer** – per-statement access control; aggregate result is *deny > ignore > allow*
-///   (`.deny` short-circuits). See `addAuthorizerObserver(_:)`.
+/// - **Authorizer** – per-statement access control; use `setAuthorizerValidator(_:)` for access control
+///   or `addAuthorizerObserver(_:)` for side-effect-only observation.
 ///
 /// ### Observer Registration Styles
 ///
 /// | Style | API | Lifetime | Cleanup | Notes |
 /// |------|-----|----------|---------|-------|
-/// | RAII | `add…Observer` | Until ``SQLiteHookToken`` dealloc | `token.cancel()` optional | Most common; drop token to stop. |
-/// | Persistent | `install…Observer` | Until `removeObserver(_:)` *or* connection close | Keep ``SQLiteObserverID`` | Discard ID (`_ = …`) for connection-lifetime observer. |
+/// | Token-Based | `add…Observer`, `set…Validator` | Until ``SQLiteHookToken`` canceled or deallocated | `token.cancel()` or auto | Set `autoCancel: true` for automatic cleanup on dealloc. |
 /// | Scoped | `with…Observer` | Active only for closure duration | Auto | Handy for tests / temporary instrumentation. |
 ///
 /// ### Threading
@@ -83,8 +82,8 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 /// ```
 ///
 /// ### Cleanup
-/// - Dropping a ``SQLiteHookToken`` auto-cancels (idempotent).
-/// - Call `removeObserver(_:)` to stop a persistent observer early.
+/// - Dropping a ``SQLiteHookToken`` auto-cancels if `autoCancel: true` (idempotent).
+/// - Call `token.cancel()` to stop an observer early.
 /// - All observers are torn down automatically when the connection closes; later cancels are safe.
 ///
 public final class SQLiteConnection: SQLiteDatabase, Sendable {

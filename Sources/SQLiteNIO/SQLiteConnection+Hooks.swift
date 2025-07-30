@@ -186,36 +186,43 @@ extension SQLiteConnection {
 }
 
 /// Returned by every `add…Observer` call (sync **or** async; update / commit / rollback / authorizer). Call
-/// `cancel()` (or just let the token fall out of scope) to unregister its
-/// associated callback.
+/// `cancel()` to unregister its associated callback.
 ///
-/// - Important: **Token lifetime**
+/// - Important: **Token cleanup behavior**
 ///
-/// The observer remains active only as long as this token is retained. If you
-/// don't store the token in a variable it is deallocated immediately and the
-/// observer is canceled:
+/// By default (`autoCancel: false`), observers remain active until you explicitly
+/// call `cancel()`. The token can be dropped without affecting the observer:
 ///
 /// ```swift
-/// // ❌ WRONG – token dropped immediately; observer canceled in deinit
+/// // ✅ VALID – observer stays active until connection closes
 /// _ = try await connection.addUpdateObserver { event in
-///     print("This will never be called!")
+///     print("This will be called for the connection's lifetime!")
 /// }
 ///
-/// // ✅ CORRECT – retain the token while you need callbacks
+/// // ✅ ALSO VALID – retain token for explicit control
 /// let token = try await connection.addUpdateObserver { event in
 ///     print("Update: \(event.table) row \(event.rowID) was \(event.operation)")
 /// }
-/// // Keep `token` alive as long as you need the observer
+/// // Call token.cancel() when you want to stop the observer
 /// ```
 ///
-/// Hook tokens automatically cancel themselves when deallocated, ensuring that
-/// callbacks are cleaned up even if you never call `cancel()` explicitly.
+/// For automatic cleanup on token deallocation, use `autoCancel: true`:
+///
+/// ```swift
+/// let token = try await connection.addUpdateObserver(autoCancel: true) { event in
+///     print("Auto-canceled when token is deallocated")
+/// }
+/// // Observer stops when `token` goes out of scope
+/// ```
+///
 /// Calling `cancel()` after the connection has been closed is a no-op.
 public final class SQLiteHookToken: Sendable, Hashable {
-    private let id = UUID()
+    public let id = UUID()
+    public let autoCancel: Bool
     private let cancelBlock: @Sendable () -> Void
 
-    fileprivate init(cancel: @escaping @Sendable () -> Void) {
+    fileprivate init(autoCancel: Bool, cancel: @escaping @Sendable () -> Void) {
+        self.autoCancel = autoCancel
         self.cancelBlock = cancel
     }
 
@@ -228,7 +235,9 @@ public final class SQLiteHookToken: Sendable, Hashable {
     }
 
     deinit {
-        cancelBlock()
+        if autoCancel {
+            cancelBlock()
+        }
     }
 
     // MARK: - Hashable
@@ -242,24 +251,7 @@ public final class SQLiteHookToken: Sendable, Hashable {
     }
 }
 
-/// Identifier for persistent observers installed with the persistent observer
-/// methods (e.g., `installUpdateObserver(_:)`, `installCommitObserver(_:)`, etc.).
-///
-/// Use this identifier with `removeObserver(_:)` to unregister
-/// the observer when it is no longer needed.
-///
-/// Unlike ``SQLiteHookToken``, this identifier does **not** automatically clean up
-/// when deallocated—you must explicitly call `removeObserver(_:)`.
-public struct SQLiteObserverID: Sendable, Hashable {
-    let uuid: UUID
-    /// The type of hook this observer ID represents.
-    public let type: SQLiteConnection.HookKind
 
-    fileprivate init(type: SQLiteConnection.HookKind) {
-        self.uuid = UUID()
-        self.type = type
-    }
-}
 
 // MARK: - Type Aliases
 
@@ -271,13 +263,26 @@ extension SQLiteConnection {
     /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
     public typealias SQLiteUpdateHookCallback = @Sendable (SQLiteUpdateEvent) -> Void
 
-    /// The type signature for commit hook callbacks.
+    /// The type signature for commit observer callbacks (pure observation, cannot veto).
+    ///
+    /// Commit observers are for logging, metrics, and other side effects that should not
+    /// interfere with the commit process. They cannot veto or abort commits.
+    ///
+    /// - Parameter event: A ``SQLiteCommitEvent`` containing details about the commit attempt.
+    ///
+    /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    public typealias SQLiteCommitObserver = @Sendable (SQLiteCommitEvent) -> Void
+
+    /// The type signature for commit validator callbacks (can veto commits).
+    ///
+    /// Commit validators can examine the transaction and decide whether to allow or deny
+    /// the commit. Use this for business rule validation, constraints, or access control.
     ///
     /// - Parameter event: A ``SQLiteCommitEvent`` containing details about the commit attempt.
     /// - Returns: A ``SQLiteCommitResponse`` indicating whether to allow or deny the commit.
     ///
     /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
-    public typealias SQLiteCommitHookCallback = @Sendable (SQLiteCommitEvent) -> SQLiteCommitResponse
+    public typealias SQLiteCommitValidator = @Sendable (SQLiteCommitEvent) -> SQLiteCommitResponse
 
     /// The type signature for rollback hook callbacks.
     ///
@@ -286,13 +291,29 @@ extension SQLiteConnection {
     /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
     public typealias SQLiteRollbackHookCallback = @Sendable (SQLiteRollbackEvent) -> Void
 
-    /// The type signature for authorizer hook callbacks.
+    /// The type signature for authorizer observer callbacks.
+    ///
+    /// Authorizer observers perform pure observation (logging, metrics, auditing) without
+    /// the ability to influence access control decisions. They are notified only after
+    /// the authorizer validator (if any) has approved the operation.
+    ///
+    /// - Parameter event: A ``SQLiteAuthorizerEvent`` containing details about the access attempt.
+    ///
+    /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    public typealias SQLiteAuthorizerObserver = @Sendable (SQLiteAuthorizerEvent) -> Void
+
+    /// The type signature for authorizer validator callbacks.
+    ///
+    /// The authorizer validator examines database access attempts and decides whether to
+    /// allow, deny, or ignore them. Only one validator can be active per connection.
     ///
     /// - Parameter event: A ``SQLiteAuthorizerEvent`` containing details about the access attempt.
     /// - Returns: A ``SQLiteAuthorizerResponse`` indicating whether to allow, deny, or ignore the operation.
     ///
     /// - Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
-    public typealias SQLiteAuthorizerHookCallback = @Sendable (SQLiteAuthorizerEvent) -> SQLiteAuthorizerResponse
+    public typealias SQLiteAuthorizerValidator = @Sendable (SQLiteAuthorizerEvent) -> SQLiteAuthorizerResponse
+
+
 }
 
 // MARK: - Scoped Observers (Automatic Cleanup)
@@ -365,6 +386,7 @@ extension SQLiteConnection {
     /// Execute a block with a temporary commit observer (synchronous version).
     ///
     /// The observer is automatically removed when the block completes.
+    /// Observers cannot veto commits - they are for logging and metrics only.
     ///
     /// - Parameters:
     ///   - callback: The observer callback to register temporarily.
@@ -372,7 +394,7 @@ extension SQLiteConnection {
     /// - Returns: The return value of the body block.
     /// - Throws: Any error thrown by the body block.
     public func withCommitObserver<T>(
-        _ callback: @escaping SQLiteCommitHookCallback,
+        _ callback: @escaping SQLiteCommitObserver,
         body: () throws -> T
     ) rethrows -> T {
         let token = addCommitObserver(callback)
@@ -383,6 +405,7 @@ extension SQLiteConnection {
     /// Execute a block with a temporary commit observer (async version).
     ///
     /// The observer is automatically removed when the block completes.
+    /// Observers cannot veto commits - they are for logging and metrics only.
     ///
     /// - Parameters:
     ///   - callback: The observer callback to register temporarily.
@@ -390,10 +413,68 @@ extension SQLiteConnection {
     /// - Returns: The return value of the body block.
     /// - Throws: Any error thrown by the body block.
     public func withCommitObserver<T>(
-        _ callback: @escaping SQLiteCommitHookCallback,
+        _ callback: @escaping SQLiteCommitObserver,
         body: () async throws -> T
     ) async throws -> T {
         let token = try await addCommitObserver(callback)
+        defer { token.cancel() }
+        return try await body()
+    }
+
+    /// Execute a block with a temporary authorizer observer (synchronous version).
+    ///
+    /// The observer is automatically removed when the block completes.
+    /// Authorizer observers perform pure observation without influencing access control.
+    ///
+    /// ```swift
+    /// let result = connection.withAuthorizerObserver({ event in
+    ///     print("Database access: \(event.action)")
+    /// }) {
+    ///     // perform operations - observer is active
+    ///     return someComputation()
+    /// }
+    /// // observer is automatically removed here
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - callback: The observer callback to register temporarily.
+    ///   - body: The block to execute with the observer active.
+    /// - Returns: The return value of the body block.
+    /// - Throws: Any error thrown by the body block.
+    public func withAuthorizerObserver<T>(
+        _ callback: @escaping SQLiteAuthorizerObserver,
+        body: () throws -> T
+    ) rethrows -> T {
+        let token = addAuthorizerObserver(callback)
+        defer { token.cancel() }
+        return try body()
+    }
+
+    /// Execute a block with a temporary authorizer observer (async version).
+    ///
+    /// The observer is automatically removed when the block completes.
+    /// Authorizer observers perform pure observation without influencing access control.
+    ///
+    /// ```swift
+    /// let result = try await connection.withAuthorizerObserver({ event in
+    ///     print("Database access: \(event.action)")
+    /// }) {
+    ///     // perform async operations - observer is active
+    ///     return await someAsyncComputation()
+    /// }
+    /// // observer is automatically removed here
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - callback: The observer callback to register temporarily.
+    ///   - body: The block to execute with the observer active.
+    /// - Returns: The return value of the body block.
+    /// - Throws: Any error thrown by the body block.
+    public func withAuthorizerObserver<T>(
+        _ callback: @escaping SQLiteAuthorizerObserver,
+        body: () async throws -> T
+    ) async throws -> T {
+        let token = try await addAuthorizerObserver(callback)
         defer { token.cancel() }
         return try await body()
     }
@@ -433,49 +514,13 @@ extension SQLiteConnection {
         defer { token.cancel() }
         return try await body()
     }
-
-    /// Execute a block with a temporary authorizer observer (synchronous version).
-    ///
-    /// The observer is automatically removed when the block completes.
-    ///
-    /// - Parameters:
-    ///   - callback: The observer callback to register temporarily.
-    ///   - body: The block to execute with the observer active.
-    /// - Returns: The return value of the body block.
-    /// - Throws: Any error thrown by the body block.
-    public func withAuthorizerObserver<T>(
-        _ callback: @escaping SQLiteAuthorizerHookCallback,
-        body: () throws -> T
-    ) rethrows -> T {
-        let token = addAuthorizerObserver(callback)
-        defer { token.cancel() }
-        return try body()
-    }
-
-    /// Execute a block with a temporary authorizer observer (async version).
-    ///
-    /// The observer is automatically removed when the block completes.
-    ///
-    /// - Parameters:
-    ///   - callback: The observer callback to register temporarily.
-    ///   - body: The block to execute with the observer active.
-    /// - Returns: The return value of the body block.
-    /// - Throws: Any error thrown by the body block.
-    public func withAuthorizerObserver<T>(
-        _ callback: @escaping SQLiteAuthorizerHookCallback,
-        body: () async throws -> T
-    ) async throws -> T {
-        let token = try await addAuthorizerObserver(callback)
-        defer { token.cancel() }
-        return try await body()
-    }
 }
 
-// MARK: - RAII Observers (Token-Based Cleanup)
+// MARK: - Token-Based Observers
 
-/// RAII Observer APIs
+/// Token-Based Observer APIs
 ///
-/// - Tag: RAIIObservers
+/// - Tag: TokenObservers
 extension SQLiteConnection {
     /// Register an observer for the SQLite *update* hook (row-level DML).
     ///
@@ -492,44 +537,71 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when update events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addUpdateObserver(_ callback: @escaping SQLiteUpdateHookCallback) -> SQLiteHookToken {
+    public func addUpdateObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteUpdateHookCallback) -> SQLiteHookToken {
         let id = UUID()
         withBuckets { $0.update[id] = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken { [weak self] in
+        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.update.removeValue(forKey: id) }
             self.uninstallDispatcherIfNeeded(kind: .update)
         }
     }
 
-    /// Register an observer for the SQLite *commit* hook.
+    /// Register a pure observer for SQLite commit events (cannot veto commits).
     ///
-    /// Fired whenever a transaction is about to be committed. All registered
-    /// observers are invoked. If **any** observer returns `.deny`, the commit is
-    /// aborted and the transaction is rolled back.
+    /// Commit observers are for logging, metrics, and other side effects that should
+    /// not interfere with the commit process. They cannot veto commits.
     ///
     /// ```swift
     /// let token = connection.addCommitObserver { event in
-    ///     // Perform validation logic here
-    ///     print("Commit attempted at \(event.date)")
-    ///     return .allow // Allow commit to proceed
+    ///     logger.info("Transaction committed: \(event)")
+    ///     metrics.increment("commits")
     /// }
     /// ```
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addCommitObserver(_ callback: @escaping SQLiteCommitHookCallback) -> SQLiteHookToken {
+    public func addCommitObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitObserver) -> SQLiteHookToken {
         let id = UUID()
-        withBuckets { $0.commit[id] = callback }
+        withBuckets { $0.commitObservers[id] = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken { [weak self] in
+        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
             guard let self else { return }
-            self.withBuckets { $0.commit.removeValue(forKey: id) }
+            self.withBuckets { $0.commitObservers.removeValue(forKey: id) }
+            self.uninstallDispatcherIfNeeded(kind: .commit)
+        }
+    }
+
+    /// Register a validator for SQLite commit events (can veto commits).
+    ///
+    /// Commit validators can examine the transaction and decide whether to allow or deny
+    /// the commit. Use this for business rule validation, constraints, or access control.
+    ///
+    /// ```swift
+    /// let token = connection.addCommitValidator { event in
+    ///     // Perform validation logic here
+    ///     return businessRules.validate(event) ? .allow : .deny
+    /// }
+    /// ```
+    ///
+    /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
+    ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
+    /// - Parameter callback: Closure to invoke when commit events occur.
+    /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
+    public func setCommitValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitValidator) -> SQLiteHookToken {
+        withBuckets { $0.commitValidator = callback }
+        installDispatcherIfNeeded()
+        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            guard let self else { return }
+            self.withBuckets { $0.commitValidator = nil }
             self.uninstallDispatcherIfNeeded(kind: .commit)
         }
     }
@@ -547,13 +619,14 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when rollback events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addRollbackObserver(_ callback: @escaping SQLiteRollbackHookCallback) -> SQLiteHookToken {
+    public func addRollbackObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteRollbackHookCallback) -> SQLiteHookToken {
         let id = UUID()
         withBuckets { $0.rollback[id] = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken { [weak self] in
+        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.rollback.removeValue(forKey: id) }
             self.uninstallDispatcherIfNeeded(kind: .rollback)
@@ -562,18 +635,42 @@ extension SQLiteConnection {
 
     /// Register an observer for the SQLite *authorizer* hook.
     ///
-    /// Called during statement preparation to authorize database access operations.
-    /// This enables precise read-set detection and access control at the table/column level.
-    ///
-    /// When multiple observers are registered, the most restrictive response is used:
-    /// - If any observer returns `.deny`, the operation is denied
-    /// - If any observer returns `.ignore` (and none return `.deny`), the operation is ignored
-    /// - Otherwise, the operation is allowed
+    /// Authorizer observers perform pure observation (logging, metrics, auditing)
+    /// without influencing access control decisions. They are notified only after
+    /// the authorizer validator (if any) has approved the operation.
     ///
     /// ```swift
     /// let token = connection.addAuthorizerObserver { event in
-    ///     if event.action == .read {
-    ///         print("Reading from \(event.parameter1 ?? "unknown") table")
+    ///     print("Database access: \(event.action) on \(event.parameter1 ?? "N/A")")
+    /// }
+    /// ```
+    ///
+    /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
+    ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter callback: Closure to invoke when authorization events occur.
+    /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
+    public func addAuthorizerObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerObserver) -> SQLiteHookToken {
+        let id = UUID()
+        withBuckets { $0.authorizerObservers[id] = callback }
+        installDispatcherIfNeeded()
+        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            guard let self else { return }
+            self.withBuckets { $0.authorizerObservers.removeValue(forKey: id) }
+            self.uninstallDispatcherIfNeeded(kind: .authorizer)
+        }
+    }
+
+    /// Set the validator for the SQLite *authorizer* hook.
+    ///
+    /// The authorizer validator examines database access attempts and decides whether to
+    /// allow, deny, or ignore them. Only one validator can be active per connection.
+    /// Setting a new validator replaces any existing validator.
+    ///
+    /// ```swift
+    /// let token = connection.setAuthorizerValidator { event in
+    ///     if event.action == .delete && event.parameter1 == "sensitive_table" {
+    ///         return .deny
     ///     }
     ///     return .allow
     /// }
@@ -581,25 +678,25 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when authorization events occur.
-    /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addAuthorizerObserver(_ callback: @escaping SQLiteAuthorizerHookCallback) -> SQLiteHookToken {
-        let id = UUID()
-        withBuckets { $0.authorizer[id] = callback }
+    /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
+    public func setAuthorizerValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerValidator) -> SQLiteHookToken {
+        withBuckets { $0.authorizerValidator = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken { [weak self] in
+        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
             guard let self else { return }
-            self.withBuckets { $0.authorizer.removeValue(forKey: id) }
+            self.withBuckets { $0.authorizerValidator = nil }
             self.uninstallDispatcherIfNeeded(kind: .authorizer)
         }
     }
 }
 
-// MARK: - RAII Observers (Async Token-Based Cleanup)
+// MARK: - Token-Based Observers
 
-/// Async RAII Observer APIs
+/// Async Token-Based Observer APIs
 ///
-/// - Tag: AsyncRAIIObservers
+/// - Tag: AsyncTokenObservers
 extension SQLiteConnection {
     /// Register an observer for the SQLite *update* hook (row-level DML).
     ///
@@ -616,14 +713,15 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when update events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addUpdateObserver(_ callback: @escaping SQLiteUpdateHookCallback) async throws -> SQLiteHookToken {
+    public func addUpdateObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteUpdateHookCallback) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
             self.withBuckets { $0.update[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken { [weak self] in
+            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.update.removeValue(forKey: id) }
                 self.uninstallDispatcherIfNeeded(kind: .update)
@@ -631,32 +729,60 @@ extension SQLiteConnection {
         }
     }
 
-    /// Register an observer for the SQLite *commit* hook.
+    /// Register a pure observer for SQLite commit events (cannot veto commits).
     ///
-    /// Fired whenever a transaction is about to be committed. All registered
-    /// observers are invoked. If **any** observer returns `.deny`, the commit is
-    /// aborted and the transaction is rolled back.
+    /// Commit observers are for logging, metrics, and other side effects that should
+    /// not interfere with the commit process. They cannot veto commits.
     ///
     /// ```swift
     /// let token = try await connection.addCommitObserver { event in
-    ///     // Perform validation logic here
-    ///     print("Commit attempted at \(event.date)")
-    ///     return .allow // Allow commit to proceed
+    ///     logger.info("Transaction committed: \(event)")
+    ///     metrics.increment("commits")
     /// }
     /// ```
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addCommitObserver(_ callback: @escaping SQLiteCommitHookCallback) async throws -> SQLiteHookToken {
+    public func addCommitObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitObserver) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
-            self.withBuckets { $0.commit[id] = callback }
+            self.withBuckets { $0.commitObservers[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken { [weak self] in
+            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
                 guard let self else { return }
-                self.withBuckets { $0.commit.removeValue(forKey: id) }
+                self.withBuckets { $0.commitObservers.removeValue(forKey: id) }
+                self.uninstallDispatcherIfNeeded(kind: .commit)
+            }
+        }
+    }
+
+    /// Register a validator for SQLite commit events (can veto commits).
+    ///
+    /// Commit validators can examine the transaction and decide whether to allow or deny
+    /// the commit. Use this for business rule validation, constraints, or access control.
+    ///
+    /// ```swift
+    /// let token = try await connection.addCommitValidator { event in
+    ///     // Perform validation logic here
+    ///     return businessRules.validate(event) ? .allow : .deny
+    /// }
+    /// ```
+    ///
+    /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
+    ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
+    /// - Parameter callback: Closure to invoke when commit events occur.
+    /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
+    public func setCommitValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitValidator) async throws -> SQLiteHookToken {
+        try await self.threadPool.runIfActive {
+            self.withBuckets { $0.commitValidator = callback }
+            self.installDispatcherIfNeeded()
+            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+                guard let self else { return }
+                self.withBuckets { $0.commitValidator = nil }
                 self.uninstallDispatcherIfNeeded(kind: .commit)
             }
         }
@@ -675,14 +801,15 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when rollback events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addRollbackObserver(_ callback: @escaping SQLiteRollbackHookCallback) async throws -> SQLiteHookToken {
+    public func addRollbackObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteRollbackHookCallback) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
             self.withBuckets { $0.rollback[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken { [weak self] in
+            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.rollback.removeValue(forKey: id) }
                 self.uninstallDispatcherIfNeeded(kind: .rollback)
@@ -690,433 +817,65 @@ extension SQLiteConnection {
         }
     }
 
-    /// Register an observer for the SQLite *authorizer* hook.
+    /// Register an observer for the SQLite *authorizer* hook (async version).
     ///
-    /// Called during statement preparation to authorize database access operations.
-    /// This enables precise read-set detection and access control at the table/column level.
-    ///
-    /// When multiple observers are registered, the most restrictive response is used:
-    /// - If any observer returns `.deny`, the operation is denied
-    /// - If any observer returns `.ignore` (and none return `.deny`), the operation is ignored
-    /// - Otherwise, the operation is allowed
+    /// Authorizer observers perform pure observation (logging, metrics, auditing)
+    /// without influencing access control decisions. They are notified only after
+    /// the authorizer validator (if any) has approved the operation.
     ///
     /// ```swift
     /// let token = try await connection.addAuthorizerObserver { event in
-    ///     if event.action == .read {
-    ///         print("Reading from \(event.parameter1 ?? "unknown") table")
-    ///     }
-    ///     return .allow
+    ///     print("Database access: \(event.action) on \(event.parameter1 ?? "N/A")")
     /// }
     /// ```
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addAuthorizerObserver(_ callback: @escaping SQLiteAuthorizerHookCallback) async throws -> SQLiteHookToken {
+    public func addAuthorizerObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerObserver) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
-            self.withBuckets { $0.authorizer[id] = callback }
+            self.withBuckets { $0.authorizerObservers[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken { [weak self] in
+            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
                 guard let self else { return }
-                self.withBuckets { $0.authorizer.removeValue(forKey: id) }
+                self.withBuckets { $0.authorizerObservers.removeValue(forKey: id) }
                 self.uninstallDispatcherIfNeeded(kind: .authorizer)
             }
         }
     }
-}
 
-// MARK: - Persistent Observers (Explicit Removal)
-
-/// Persistent Observer APIs
-///
-/// - Tag: PersistentObservers
-extension SQLiteConnection {
-    /// Install a **persistent** update observer (row-level DML).
+    /// Set the validator for the SQLite *authorizer* hook (async version).
     ///
-    /// Unlike `addUpdateObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
+    /// The authorizer validator examines database access attempts and decides whether to
+    /// allow, deny, or ignore them. Only one validator can be active per connection.
+    /// Setting a new validator replaces any existing validator.
     ///
     /// ```swift
-    /// let id = connection.installUpdateObserver { event in
-    ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
-    /// }
-    /// // Clean up the observer when no longer needed:
-    /// connection.removeObserver(id)
-    /// ```
-    ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = connection.installUpdateObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop as needed.
-    /// - Parameter callback: Closure to invoke when update events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installUpdateObserver(_ callback: @escaping SQLiteUpdateHookCallback) -> SQLiteObserverID {
-        let id = SQLiteObserverID(type: SQLiteConnection.HookKind.update)
-        withBuckets { $0.update[id.uuid] = callback }
-        installDispatcherIfNeeded()
-        return id
-    }
-
-    /// Install a **persistent** commit observer.
-    ///
-    /// Unlike `addCommitObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
-    ///
-    /// The commit hook is invoked whenever a transaction is about to be committed.
-    /// All registered observers are invoked. If **any** observer returns `.deny`,
-    /// the commit is aborted and the transaction is rolled back.
-    ///
-    /// ```swift
-    /// let id = connection.installCommitObserver { event in
-    ///     // Perform validation logic here
-    ///     print("Commit attempted at \(event.date)")
-    ///     return .allow // Allow commit to proceed
-    /// }
-    /// // Clean up the observer when no longer needed:
-    /// connection.removeObserver(id)
-    /// ```
-    ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = connection.installCommitObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop as needed.
-    /// - Parameter callback: Closure to invoke when commit events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installCommitObserver(_ callback: @escaping SQLiteCommitHookCallback) -> SQLiteObserverID {
-        let id = SQLiteObserverID(type: SQLiteConnection.HookKind.commit)
-        withBuckets { $0.commit[id.uuid] = callback }
-        installDispatcherIfNeeded()
-        return id
-    }
-
-    /// Install a **persistent** rollback observer.
-    ///
-    /// Unlike `addRollbackObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
-    ///
-    /// The rollback hook is invoked whenever a transaction is rolled back.
-    /// Multiple observers can be registered for the same connection.
-    ///
-    /// ```swift
-    /// let id = connection.installRollbackObserver { event in
-    ///     print("Transaction was rolled back at \(event.date)")
-    /// }
-    /// // Clean up the observer when no longer needed:
-    /// connection.removeObserver(id)
-    /// ```
-    ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = connection.installRollbackObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop as needed.
-    /// - Parameter callback: Closure to invoke when rollback events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installRollbackObserver(_ callback: @escaping SQLiteRollbackHookCallback) -> SQLiteObserverID {
-        let id = SQLiteObserverID(type: SQLiteConnection.HookKind.rollback)
-        withBuckets { $0.rollback[id.uuid] = callback }
-        installDispatcherIfNeeded()
-        return id
-    }
-
-    /// Install a **persistent** authorizer observer.
-    ///
-    /// Unlike `addAuthorizerObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
-    ///
-    /// The authorizer hook is called during statement preparation to authorize
-    /// database access operations. This enables precise read-set detection and
-    /// access control at the table/column level.
-    ///
-    /// When multiple observers are registered, the most restrictive response is used:
-    /// - If any observer returns `.deny`, the operation is denied
-    /// - If any observer returns `.ignore` (and none return `.deny`), the operation is ignored
-    /// - Otherwise, the operation is allowed
-    ///
-    /// ```swift
-    /// let id = connection.installAuthorizerObserver { event in
-    ///     if event.action == .read {
-    ///         print("Reading from \(event.parameter1 ?? "unknown") table")
+    /// let token = try await connection.setAuthorizerValidator { event in
+    ///     if event.action == .delete && event.parameter1 == "sensitive_table" {
+    ///         return .deny
     ///     }
     ///     return .allow
     /// }
-    /// // Clean up the observer when no longer needed:
-    /// connection.removeObserver(id)
     /// ```
     ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = connection.installAuthorizerObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop as needed.
+    /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
+    ///   internal thread; hop to your own actor or event loop as needed.
+    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
     /// - Parameter callback: Closure to invoke when authorization events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installAuthorizerObserver(_ callback: @escaping SQLiteAuthorizerHookCallback) -> SQLiteObserverID {
-        let id = SQLiteObserverID(type: SQLiteConnection.HookKind.authorizer)
-        withBuckets { $0.authorizer[id.uuid] = callback }
-        installDispatcherIfNeeded()
-        return id
-    }
-
-    /// Remove a persistent observer previously installed via one of the
-    /// `install…Observer` methods (`installUpdateObserver`, `installCommitObserver`,
-    /// `installRollbackObserver`, `installAuthorizerObserver`).
-    ///
-    /// - Parameter observerID: The identifier returned when the observer was installed.
-    /// - Returns: `true` if an observer with that ID was removed; `false` if no such observer existed (already removed or never installed).
-    ///
-    /// - Note: Calling this after the connection has closed is safe and returns `false`.
-    @discardableResult
-    public func removeObserver(_ observerID: SQLiteObserverID) -> Bool {
-        let wasRemoved = withBuckets { buckets in
-            switch observerID.type {
-            case .update:
-                return buckets.update.removeValue(forKey: observerID.uuid) != nil
-            case .commit:
-                return buckets.commit.removeValue(forKey: observerID.uuid) != nil
-            case .rollback:
-                return buckets.rollback.removeValue(forKey: observerID.uuid) != nil
-            case .authorizer:
-                return buckets.authorizer.removeValue(forKey: observerID.uuid) != nil
+    /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
+    public func setAuthorizerValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerValidator) async throws -> SQLiteHookToken {
+        try await self.threadPool.runIfActive {
+            self.withBuckets { $0.authorizerValidator = callback }
+            self.installDispatcherIfNeeded()
+            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+                guard let self else { return }
+                self.withBuckets { $0.authorizerValidator = nil }
+                self.uninstallDispatcherIfNeeded(kind: .authorizer)
             }
-        }
-        if wasRemoved {
-            uninstallDispatcherIfNeeded(kind: observerID.type)
-        }
-        return wasRemoved
-    }
-}
-
-// MARK: - Persistent Observers (Async Explicit Removal)
-
-/// Async Persistent Observer APIs
-///
-/// - Tag: AsyncPersistentObservers
-extension SQLiteConnection {
-    /// Install a **persistent** update observer (row-level DML).
-    ///
-    /// Unlike `addUpdateObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
-    ///
-    /// ```swift
-    /// let id = try await connection.installUpdateObserver { event in
-    ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
-    /// }
-    /// // Clean up the observer when no longer needed:
-    /// try await connection.removeObserver(id)
-    /// ```
-    ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = try await connection.installUpdateObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter callback: Closure to invoke when update events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installUpdateObserver(_ callback: @escaping SQLiteUpdateHookCallback) async throws -> SQLiteObserverID {
-        try await self.threadPool.runIfActive {
-            let id = SQLiteObserverID(type: SQLiteConnection.HookKind.update)
-            self.withBuckets { $0.update[id.uuid] = callback }
-            self.installDispatcherIfNeeded()
-            return id
-        }
-    }
-
-    /// Install a **persistent** commit observer.
-    ///
-    /// Unlike `addCommitObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
-    ///
-    /// The commit hook is invoked whenever a transaction is about to be committed.
-    /// All registered observers are invoked. If **any** observer returns `.deny`,
-    /// the commit is aborted and the transaction is rolled back.
-    ///
-    /// ```swift
-    /// let id = try await connection.installCommitObserver { event in
-    ///     // Perform validation logic here
-    ///     print("Commit attempted at \(event.date)")
-    ///     return .allow // Allow commit to proceed
-    /// }
-    /// // Clean up the observer when no longer needed:
-    /// try await connection.removeObserver(id)
-    /// ```
-    ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = try await connection.installCommitObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter callback: Closure to invoke when commit events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installCommitObserver(_ callback: @escaping SQLiteCommitHookCallback) async throws -> SQLiteObserverID {
-        try await self.threadPool.runIfActive {
-            let id = SQLiteObserverID(type: SQLiteConnection.HookKind.commit)
-            self.withBuckets { $0.commit[id.uuid] = callback }
-            self.installDispatcherIfNeeded()
-            return id
-        }
-    }
-
-    /// Install a **persistent** rollback observer.
-    ///
-    /// Unlike `addRollbackObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
-    ///
-    /// The rollback hook is invoked whenever a transaction is rolled back.
-    /// Multiple observers can be registered for the same connection.
-    ///
-    /// ```swift
-    /// let id = try await connection.installRollbackObserver { event in
-    ///     print("Transaction was rolled back at \(event.date)")
-    /// }
-    /// // Clean up the observer when no longer needed:
-    /// try await connection.removeObserver(id)
-    /// ```
-    ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = try await connection.installRollbackObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter callback: Closure to invoke when rollback events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installRollbackObserver(_ callback: @escaping SQLiteRollbackHookCallback) async throws -> SQLiteObserverID {
-        try await self.threadPool.runIfActive {
-            let id = SQLiteObserverID(type: SQLiteConnection.HookKind.rollback)
-            self.withBuckets { $0.rollback[id.uuid] = callback }
-            self.installDispatcherIfNeeded()
-            return id
-        }
-    }
-
-    /// Install a **persistent** authorizer observer.
-    ///
-    /// Unlike `addAuthorizerObserver(_:)` the returned observer remains active
-    /// until you explicitly call `removeObserver(_:)` *or*
-    /// the connection closes. The observer does **not** auto-remove when the
-    /// returned ``SQLiteObserverID`` is deallocated.
-    ///
-    /// The authorizer hook is called during statement preparation to authorize
-    /// database access operations. This enables precise read-set detection and
-    /// access control at the table/column level.
-    ///
-    /// When multiple observers are registered, the most restrictive response is used:
-    /// - If any observer returns `.deny`, the operation is denied
-    /// - If any observer returns `.ignore` (and none return `.deny`), the operation is ignored
-    /// - Otherwise, the operation is allowed
-    ///
-    /// ```swift
-    /// let id = try await connection.installAuthorizerObserver { event in
-    ///     if event.action == .read {
-    ///         print("Reading from \(event.parameter1 ?? "unknown") table")
-    ///     }
-    ///     return .allow
-    /// }
-    /// // Clean up the observer when no longer needed:
-    /// try await connection.removeObserver(id)
-    /// ```
-    ///
-    /// - Important: Retain the returned ``SQLiteObserverID`` if you plan to
-    ///   remove this observer before the connection closes. To install a
-    ///   connection-lifetime observer intentionally, discard it:
-    ///
-    /// ```swift
-    /// _ = try await connection.installAuthorizerObserver { event in /* connection lifetime */ }
-    /// ```
-    ///
-    /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter callback: Closure to invoke when authorization events occur.
-    /// - Returns: A ``SQLiteObserverID`` that can be used to remove the observer.
-    public func installAuthorizerObserver(_ callback: @escaping SQLiteAuthorizerHookCallback) async throws -> SQLiteObserverID {
-        try await self.threadPool.runIfActive {
-            let id = SQLiteObserverID(type: SQLiteConnection.HookKind.authorizer)
-            self.withBuckets { $0.authorizer[id.uuid] = callback }
-            self.installDispatcherIfNeeded()
-            return id
-        }
-    }
-
-    /// Remove a persistent observer previously installed via one of the
-    /// `install…Observer` methods (`installUpdateObserver`, `installCommitObserver`,
-    /// `installRollbackObserver`, `installAuthorizerObserver`).
-    ///
-    /// - Parameter observerID: The identifier returned when the observer was installed.
-    /// - Returns: `true` if an observer with that ID was removed; `false` if no such observer existed (already removed or never installed).
-    ///
-    /// - Note: Calling this after the connection has closed is safe and returns `false`.
-    @discardableResult
-    public func removeObserver(_ observerID: SQLiteObserverID) async throws -> Bool {
-        try await self.threadPool.runIfActive {
-            let wasRemoved = self.withBuckets { buckets in
-                switch observerID.type {
-                case .update:
-                    return buckets.update.removeValue(forKey: observerID.uuid) != nil
-                case .commit:
-                    return buckets.commit.removeValue(forKey: observerID.uuid) != nil
-                case .rollback:
-                    return buckets.rollback.removeValue(forKey: observerID.uuid) != nil
-                case .authorizer:
-                    return buckets.authorizer.removeValue(forKey: observerID.uuid) != nil
-                }
-            }
-            if wasRemoved {
-                self.uninstallDispatcherIfNeeded(kind: observerID.type)
-            }
-            return wasRemoved
         }
     }
 }
@@ -1126,9 +885,11 @@ extension SQLiteConnection {
 extension SQLiteConnection {
     struct ObserverBuckets: Sendable {
         var update: [UUID: SQLiteUpdateHookCallback] = [:]
-        var commit: [UUID: SQLiteCommitHookCallback] = [:]
+        var commitObservers: [UUID: SQLiteCommitObserver] = [:]
+        var commitValidator: SQLiteCommitValidator? = nil
         var rollback: [UUID: SQLiteRollbackHookCallback] = [:]
-        var authorizer: [UUID: SQLiteAuthorizerHookCallback] = [:]
+        var authorizerObservers: [UUID: SQLiteAuthorizerObserver] = [:]
+        var authorizerValidator: SQLiteAuthorizerValidator? = nil
 
         // Track whether low-level dispatchers are installed
         var updateDispatcherInstalled = false
@@ -1155,8 +916,9 @@ extension SQLiteConnection {
                 applyUpdateHook(enabled: true)
             }
 
-            // Install commit hook dispatcher if needed
-            if !buckets.commitDispatcherInstalled && !buckets.commit.isEmpty {
+            // Install commit hook dispatcher if needed (observers or validator)
+            if !buckets.commitDispatcherInstalled &&
+                (!buckets.commitObservers.isEmpty || buckets.commitValidator != nil) {
                 buckets.commitDispatcherInstalled = true
                 applyCommitHook(enabled: true)
             }
@@ -1167,8 +929,9 @@ extension SQLiteConnection {
                 applyRollbackHook(enabled: true)
             }
 
-            // Install authorizer hook dispatcher if needed
-            if !buckets.authorizerDispatcherInstalled && !buckets.authorizer.isEmpty {
+            // Install authorizer hook dispatcher if needed (observers or validator)
+            if !buckets.authorizerDispatcherInstalled &&
+                (!buckets.authorizerObservers.isEmpty || buckets.authorizerValidator != nil) {
                 buckets.authorizerDispatcherInstalled = true
                 applyAuthorizerHook(enabled: true)
             }
@@ -1183,13 +946,13 @@ extension SQLiteConnection {
             case .update where buckets.update.isEmpty && buckets.updateDispatcherInstalled:
                 buckets.updateDispatcherInstalled = false
                 applyUpdateHook(enabled: false)
-            case .commit where buckets.commit.isEmpty && buckets.commitDispatcherInstalled:
+            case .commit where buckets.commitObservers.isEmpty && buckets.commitValidator == nil && buckets.commitDispatcherInstalled:
                 buckets.commitDispatcherInstalled = false
                 applyCommitHook(enabled: false)
             case .rollback where buckets.rollback.isEmpty && buckets.rollbackDispatcherInstalled:
                 buckets.rollbackDispatcherInstalled = false
                 applyRollbackHook(enabled: false)
-            case .authorizer where buckets.authorizer.isEmpty && buckets.authorizerDispatcherInstalled:
+            case .authorizer where buckets.authorizerObservers.isEmpty && buckets.authorizerValidator == nil && buckets.authorizerDispatcherInstalled:
                 buckets.authorizerDispatcherInstalled = false
                 applyAuthorizerHook(enabled: false)
             default:
@@ -1233,14 +996,27 @@ extension SQLiteConnection {
                 guard let context else { return 0 }
                 let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
                 let event = SQLiteCommitEvent()
-                // Copy callbacks while locked, then invoke unlocked (avoid deadlock)
-                let callbacks: [SQLiteCommitHookCallback] = connection.withBuckets { Array($0.commit.values) }
-                // Run all observers so side-effects (logging, metrics) occur even if a prior observer vetoes.
-                var veto = false
-                for cb in callbacks {
-                    if cb(event) == .deny { veto = true }
+                // Copy validator and observers while locked, then invoke unlocked (avoid deadlock)
+                let (validator, observers): (SQLiteCommitValidator?, [SQLiteCommitObserver]) =
+                connection.withBuckets { buckets in
+                    (buckets.commitValidator, Array(buckets.commitObservers.values))
                 }
-                return veto ? 1 : 0
+
+                // First check validator (if any)
+                if let validator = validator {
+                    let validatorResponse = validator(event)
+                    // If validator denies, short-circuit (don't run observers)
+                    if validatorResponse == .deny {
+                        return 1 // abort commit
+                    }
+                }
+
+                // Run all observers (side effects only, cannot veto)
+                for observer in observers {
+                    observer(event)
+                }
+
+                return 0 // allow commit
             }, context)
         } else {
             _ = sqlite_nio_sqlite3_commit_hook(handle.raw, nil, nil)
@@ -1275,21 +1051,30 @@ extension SQLiteConnection {
                                                   parameter2: parameter2.map { String(cString: $0) },
                                                   database: database.map { String(cString: $0) },
                                                   trigger: trigger.map { String(cString: $0) })
-                // Copy callbacks while locked, then invoke unlocked (avoid deadlock)
-                let callbacks: [SQLiteAuthorizerHookCallback] = connection.withBuckets { Array($0.authorizer.values) }
-                // Aggregate results: DENY > IGNORE > ALLOW
-                var result: SQLiteAuthorizerResponse = .allow
-                for response in callbacks.map({ $0(event) }) {
-                    switch response {
-                    case .deny:
-                        return SQLiteAuthorizerResponse.deny.rawValue // short-circuit
-                    case .ignore:
-                        result = .ignore // keep going; maybe someone denies
-                    case .allow:
-                        continue
-                    }
+                // Copy validator and observers while locked, then invoke unlocked (avoid deadlock)
+                let (validator, observers): (SQLiteAuthorizerValidator?, [SQLiteAuthorizerObserver]) =
+                connection.withBuckets { buckets in
+                    (buckets.authorizerValidator, Array(buckets.authorizerObservers.values))
                 }
-                return result.rawValue
+
+                // First check validator (if any)
+                let validatorResponse: SQLiteAuthorizerResponse
+                if let validator = validator {
+                    validatorResponse = validator(event)
+                    // If validator denies, short-circuit (don't run observers)
+                    if validatorResponse == .deny {
+                        return SQLiteAuthorizerResponse.deny.rawValue
+                    }
+                } else {
+                    validatorResponse = .allow
+                }
+
+                // Run all observers (side effects only, cannot veto)
+                for observer in observers {
+                    observer(event)
+                }
+
+                return validatorResponse.rawValue
             }, context)
         } else {
             _ = sqlite_nio_sqlite3_set_authorizer(handle.raw, nil, nil)
