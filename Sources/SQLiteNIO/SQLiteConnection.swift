@@ -57,34 +57,37 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 ///
 /// ### Observable Hooks
 /// Each connection can fan out these SQLite hooks to multiple callbacks:
-/// - **Update** – row-level `INSERT` / `UPDATE` / `DELETE` events. See `addUpdateObserver(_:)`.
-/// - **Commit** – transaction about to commit; use `setCommitValidator(_:)` to veto commits
-///   or `addCommitObserver(_:)` for side-effect-only observation.
-/// - **Rollback** – transaction was rolled back. See `addRollbackObserver(_:)`.
-/// - **Authorizer** – per-statement access control; use `setAuthorizerValidator(_:)` for access control
-///   or `addAuthorizerObserver(_:)` for side-effect-only observation.
+/// - **Update** – row-level `INSERT` / `UPDATE` / `DELETE` events. See `addUpdateObserver(lifetime:_:)`.
+/// - **Commit** – transaction about to commit; use `setCommitValidator(lifetime:_:)` to veto commits
+///   or `addCommitObserver(lifetime:_:)` for side-effect-only observation.
+/// - **Rollback** – transaction was rolled back. See `addRollbackObserver(lifetime:_:)`.
+/// - **Authorizer** – per-statement access control; use `setAuthorizerValidator(lifetime:_:)` for access control
+///   or `addAuthorizerObserver(lifetime:_:)` for side-effect-only observation.
 ///
 /// ### Observer Registration Styles
 ///
 /// | Style | API | Lifetime | Cleanup | Notes |
 /// |------|-----|----------|---------|-------|
-/// | Token-Based | `add…Observer`, `set…Validator` | Until ``SQLiteHookToken`` canceled or deallocated | `token.cancel()` or auto | Set `autoCancel: true` for automatic cleanup on dealloc. |
+/// | Token-Based (Scoped) | `add…Observer(lifetime: .scoped)` | Until ``SQLiteHookToken`` deallocated | Auto on token dealloc | Use for temporary observation. |
+/// | Token-Based (Pinned) | `add…Observer(lifetime: .pinned)` | Until ``SQLiteHookToken`` canceled | `token.cancel()` | Use for long-lived observation. |
 /// | Scoped | `with…Observer` | Active only for closure duration | Auto | Handy for tests / temporary instrumentation. |
 ///
 /// ### Threading
-/// Registration is thread-safe. **Callbacks run on SQLite’s internal thread**, not your event
+/// Registration is thread-safe. **Callbacks run on SQLite's internal thread**, not your event
 /// loop or actor. Hop if needed:
 ///
 /// ```swift
-/// let token = try await db.addUpdateObserver { event in
-///     Task { await myActor.handle(event) }   // hop to actor
+/// let token = try await db.addUpdateObserver(lifetime: .pinned) { [weak self] event in
+///     Task { await self?.myActor.handle(event) }   // hop to actor
 /// }
 /// ```
 ///
 /// ### Cleanup
-/// - Dropping a ``SQLiteHookToken`` auto-cancels if `autoCancel: true` (idempotent).
-/// - Call `token.cancel()` to stop an observer early.
+/// - Dropping a ``SQLiteHookToken`` with `.scoped` lifetime auto-cancels on deallocation.
+/// - Dropping a ``SQLiteHookToken`` with `.pinned` lifetime triggers a debug assertion but leaves the observer active.
+/// - Call `token.cancel()` to stop an observer early (works for both lifetimes).
 /// - All observers are torn down automatically when the connection closes; later cancels are safe.
+/// - See ``ObserverLifetime`` for detailed lifetime behavior.
 ///
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.

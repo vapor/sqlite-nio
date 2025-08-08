@@ -9,7 +9,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testUpdateHookInsert() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { event in box.append(event) }
+                try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
             }
 
             try await makeUsersTable(in: db)
@@ -26,7 +26,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testUpdateHookCRUD() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { event in box.append(event) }
+                try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
             }
 
             try await db.exec("CREATE TABLE products(id INTEGER PRIMARY KEY, value TEXT)")
@@ -43,10 +43,10 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testMultipleUpdateObservers() async throws {
         try await withOpenedConnection { db in
             let (c1, _) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { event in box.append(event) }
+                try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
             }
             let (c2, _) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { event in box.append(event) }
+                try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
             }
 
             try await makeUsersTable(in: db)
@@ -60,7 +60,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testUpdateObserverCancellation() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
-            let token = try await db.addUpdateObserver(autoCancel: false) { event in updates.append(event) }
+            let token = try await db.addUpdateObserver(lifetime: .pinned) { event in updates.append(event) }
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Carla')")
@@ -77,7 +77,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     private func assertCommit(abort: Bool) async throws {
         try await withOpenedConnection { db in
             let (commits, _) = try await withCollector(db) { box in
-                try await db.setCommitValidator { _ in box.append(()); return abort ? .deny : .allow }
+                try await db.setCommitValidator(lifetime: .pinned) { _ in box.append(()); return abort ? .deny : .allow }
             }
 
             try await db.exec("BEGIN")
@@ -101,9 +101,9 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     func testCommitObserversAggregateVeto() async throws {
         try await withOpenedConnection { db in
-            _ = try await db.addCommitObserver { _ in }
+            _ = try await db.addCommitObserver(lifetime: .pinned) { _ in }
             let (vetoes, _) = try await withCollector(db) { box in
-                try await db.setCommitValidator { _ in box.append(()); return .deny }
+                try await db.setCommitValidator(lifetime: .pinned) { _ in box.append(()); return .deny }
             }
 
             try await db.exec("BEGIN")
@@ -121,7 +121,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testRollbackHookExplicitAndImplicit() async throws {
         try await withOpenedConnection { db in
             let (rb, _) = try await withCollector(db) { box in
-                try await db.addRollbackObserver { _ in box.append(()) }
+                try await db.addRollbackObserver(lifetime: .pinned) { _ in box.append(()) }
             }
 
             try await db.exec("BEGIN")
@@ -139,7 +139,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     func testAuthorizerAllowIgnoreDeny() async throws {
         try await withOpenedConnection { db in
-            let _ = try await db.setAuthorizerValidator { event in
+            let _ = try await db.setAuthorizerValidator(lifetime: .pinned) { event in
                 switch (event.action, event.parameter2) {
                 case (.read, "content"): return .deny
                 case (.read, "metadata"): return .ignore
@@ -167,7 +167,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testAuthorizerHookDisable() async throws {
         try await withOpenedConnection { db in
             let (events, token) = try await withCollector(db) { box in
-                try await db.addAuthorizerObserver { event in box.append(event) }
+                try await db.addAuthorizerObserver(lifetime: .pinned) { event in box.append(event) }
             }
 
             try await db.exec("CREATE TABLE settings(value INT)")
@@ -185,10 +185,10 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testSimultaneousUpdateAndCommitHooks() async throws {
         try await withOpenedConnection { db in
             let (u, _) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { event in box.append(event) }
+                try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
             }
             let (c, _) = try await withCollector(db) { box in
-                try await db.addCommitObserver { _ in box.append(()) }
+                try await db.addCommitObserver(lifetime: .pinned) { _ in box.append(()) }
             }
 
             try await db.exec("BEGIN")
@@ -204,7 +204,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testObserverTokenDeinitCancels() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
-            var token: SQLiteHookToken? = try await db.addUpdateObserver(autoCancel: true) { event in updates.append(event) }
+            var token: SQLiteHookToken? = try await db.addUpdateObserver(lifetime: .scoped) { event in updates.append(event) }
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users VALUES(1,'Evan')")
@@ -222,10 +222,10 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testCommitObserversCheckedAfterUpdateHooks() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { event in box.append(event) }
+                try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
             }
             // Commit vetoer - always return .deny to veto
-            let _ = try await db.setCommitValidator { _ in .deny }
+            let _ = try await db.setCommitValidator(lifetime: .pinned) { _ in .deny }
 
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE logs(entry INT)") // inside txn
@@ -255,7 +255,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testCancelStopsFurtherEvents() async throws {
         try await withOpenedConnection { db in
             let box = Box<SQLiteUpdateEvent>()
-            let token = try await db.addUpdateObserver { event in box.append(event) }
+            let token = try await db.addUpdateObserver(lifetime: .scoped) { event in box.append(event) }
             try await makeUsersTable(in: db)
 
             try await db.exec("INSERT INTO users VALUES(1,'A')")
@@ -271,7 +271,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     func testIgnoreReturnsNull() async throws {
         try await withOpenedConnection { db in
-            let _ = try await db.setAuthorizerValidator { event in
+            let _ = try await db.setAuthorizerValidator(lifetime: .pinned) { event in
                 (event.action == .read && event.parameter2 == "secret") ? .ignore : .allow
             }
 
@@ -288,7 +288,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testNoRollbackOnCommit() async throws {
         try await withOpenedConnection { db in
             let (rb, _) = try await withCollector(db) { box in
-                try await db.addRollbackObserver { _ in box.append(()) }
+                try await db.addRollbackObserver(lifetime: .pinned) { _ in box.append(()) }
             }
 
             try await db.exec("BEGIN")
@@ -304,7 +304,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
     func testHundredRapidInserts() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
-                try await db.addUpdateObserver { event in box.append(event) }
+                try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
             }
 
             try await makeUsersTable(in: db)
@@ -337,8 +337,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
         try await withOpenedConnection { db in
             let runCount = Box<Void>()
 
-            let _ = try await db.setCommitValidator { _ in runCount.append(()); return .deny  } // veto
-            let _ = try await db.addCommitObserver { _ in runCount.append(()) }
+            let _ = try await db.setCommitValidator(lifetime: .pinned) { _ in runCount.append(()); return .deny  } // veto
+            let _ = try await db.addCommitObserver(lifetime: .pinned) { _ in runCount.append(()) }
 
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE test_table(x INT)")
@@ -359,11 +359,11 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     // MARK: - New API Tests
 
-    func testDefaultAutoCancelFalseTokenDroppedObserverPersists() async throws {
+    func testPinnedTokenDroppedObserverPersists() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
-            // Drop token immediately - observer should persist since autoCancel defaults to false
-            _ = try await db.addUpdateObserver { event in updates.append(event) }
+            // Drop token immediately - observer should persist since lifetime is .pinned
+            _ = try await db.addUpdateObserver(lifetime: .pinned) { event in updates.append(event) }
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Alice')")
@@ -376,7 +376,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
         var token: SQLiteHookToken?
 
         let connection = try await SQLiteConnection.open(storage: .memory)
-        token = try await connection.addUpdateObserver { event in updates.append(event) }
+        token = try await connection.addUpdateObserver(lifetime: .scoped) { event in updates.append(event) }
 
         try await connection.close()
 
@@ -391,7 +391,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
             let calls2 = Box<Void>()
 
             // Set first validator
-            let token1 = try await db.setCommitValidator { _ in calls1.append(()); return .allow }
+            let token1 = try await db.setCommitValidator(lifetime: .scoped) { _ in calls1.append(()); return .allow }
 
             // First validator should work
             try await db.exec("BEGIN")
@@ -400,7 +400,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
             XCTAssertEqual(calls1.count(), 1)
 
             // Replace with second validator
-            let token2 = try await db.setCommitValidator { _ in calls2.append(()); return .allow }
+            let token2 = try await db.setCommitValidator(lifetime: .scoped) { _ in calls2.append(()); return .allow }
 
             // Only second validator should be called now
             try await db.exec("BEGIN")
@@ -430,9 +430,9 @@ final class SQLiteConnectionHookTests: XCTestCase {
             let observer2 = Box<Void>()
             let validatorCalls = Box<Void>()
 
-            _ = try await db.addCommitObserver { _ in observer1.append(()) }
-            _ = try await db.setCommitValidator { _ in validatorCalls.append(()); return .allow }
-            _ = try await db.addCommitObserver { _ in observer2.append(()) }
+            _ = try await db.addCommitObserver(lifetime: .pinned) { _ in observer1.append(()) }
+            _ = try await db.setCommitValidator(lifetime: .pinned) { _ in validatorCalls.append(()); return .allow }
+            _ = try await db.addCommitObserver(lifetime: .pinned) { _ in observer2.append(()) }
 
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE test(id INT)")

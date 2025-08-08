@@ -5,6 +5,14 @@ import CSQLite
 
 // MARK: - Hook Types and Events
 
+/// Observer lifetime management for SQLite hooks.
+public enum ObserverLifetime: Sendable, Hashable {
+    /// Observer automatically cancels when the token is deallocated.
+    case scoped
+    /// Observer remains active until explicitly canceled.
+    case pinned
+}
+
 /// Represents the type of update operation that triggered the update hook.
 public struct SQLiteUpdateOperation: Sendable, Hashable {
     /// The raw SQLite operation code.
@@ -188,43 +196,46 @@ extension SQLiteConnection {
 /// Returned by every `add…Observer` and `set…Validator` call (sync **or** async; update / commit / rollback / authorizer). Call
 /// `cancel()` to unregister its associated callback.
 ///
-/// - Important: **Token cleanup behavior**
+/// - Important: **Token lifetime behavior**
 ///
-/// By default (`autoCancel: false`), observers remain active until you explicitly
-/// call `cancel()`. The token can be dropped without affecting the observer:
+/// The lifetime behavior depends on the `ObserverLifetime` parameter:
 ///
-/// ```swift
-/// // ✅ VALID – observer stays active until connection closes
-/// _ = try await connection.addUpdateObserver { event in
-///     print("This will be called for the connection's lifetime!")
-/// }
-///
-/// // ✅ ALSO VALID – retain token for explicit control
-/// let token = try await connection.addUpdateObserver { event in
-///     print("Update: \(event.table) row \(event.rowID) was \(event.operation)")
-/// }
-/// // Call token.cancel() when you want to stop the observer
-/// ```
-///
-/// For automatic cleanup on token deallocation, use `autoCancel: true`:
+/// **Scoped (`.scoped`)** - observer automatically cancels when token is deallocated:
 ///
 /// ```swift
-/// let token = try await connection.addUpdateObserver(autoCancel: true) { event in
+/// // Async usage:
+/// let token = try await connection.addUpdateObserver(lifetime: .scoped) { event in
+///     print("Auto-canceled when token is deallocated")
+/// }
+/// // Sync usage:
+/// let token = connection.addUpdateObserver(lifetime: .scoped) { event in
 ///     print("Auto-canceled when token is deallocated")
 /// }
 /// // Observer stops when `token` goes out of scope
 /// ```
 ///
-/// Calling `cancel()` after the connection has been closed is a no-op.
-public final class SQLiteHookToken: Sendable, Hashable {
-    public let id = UUID()
-    public let autoCancel: Bool
-    private let cancelBlock: @Sendable () -> Void
+/// **Pinned (`.pinned`)** - observer remains active until explicitly canceled:
+///
+/// ```swift
+/// // Observer stays active until connection closes or explicit cancel
+/// let token = try await connection.addUpdateObserver(lifetime: .pinned) { [weak self] event in
+///     self?.logger.info("This will be called until explicitly canceled!")
+/// }
+/// // Call token.cancel() when you want to stop the observer
+/// ```
+///
+/// - Important: Use `[weak self]` in observers to avoid retain cycles, especially with `.pinned` lifetime.
+///
+  /// Calling `cancel()` after the connection has been closed is a no-op.
+  public final class SQLiteHookToken: Sendable, Hashable {
+      public let id = UUID()
+      public let lifetime: ObserverLifetime
+      private let cancelBlock: @Sendable () -> Void
 
-    fileprivate init(autoCancel: Bool, cancel: @escaping @Sendable () -> Void) {
-        self.autoCancel = autoCancel
-        self.cancelBlock = cancel
-    }
+      fileprivate init(lifetime: ObserverLifetime, cancel: @escaping @Sendable () -> Void) {
+          self.lifetime = lifetime
+          self.cancelBlock = cancel
+      }
 
     /// Cancels the associated hook callback.
     ///
@@ -235,7 +246,7 @@ public final class SQLiteHookToken: Sendable, Hashable {
     }
 
     deinit {
-        if autoCancel {
+        if lifetime == .scoped {
             cancelBlock()
         }
     }
@@ -343,7 +354,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteUpdateHookCallback,
         body: () throws -> T
     ) rethrows -> T {
-        let token = addUpdateObserver(callback)
+        let token = addUpdateObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try body()
     }
@@ -374,7 +385,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteUpdateHookCallback,
         body: () async throws -> T
     ) async throws -> T {
-        let token = try await addUpdateObserver(callback)
+        let token = try await addUpdateObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try await body()
     }
@@ -393,7 +404,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteCommitObserver,
         body: () throws -> T
     ) rethrows -> T {
-        let token = addCommitObserver(callback)
+        let token = addCommitObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try body()
     }
@@ -412,7 +423,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteCommitObserver,
         body: () async throws -> T
     ) async throws -> T {
-        let token = try await addCommitObserver(callback)
+        let token = try await addCommitObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try await body()
     }
@@ -441,7 +452,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteAuthorizerObserver,
         body: () throws -> T
     ) rethrows -> T {
-        let token = addAuthorizerObserver(callback)
+        let token = addAuthorizerObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try body()
     }
@@ -470,7 +481,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteAuthorizerObserver,
         body: () async throws -> T
     ) async throws -> T {
-        let token = try await addAuthorizerObserver(callback)
+        let token = try await addAuthorizerObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try await body()
     }
@@ -488,7 +499,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteRollbackHookCallback,
         body: () throws -> T
     ) rethrows -> T {
-        let token = addRollbackObserver(callback)
+        let token = addRollbackObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try body()
     }
@@ -506,7 +517,7 @@ extension SQLiteConnection {
         _ callback: @escaping SQLiteRollbackHookCallback,
         body: () async throws -> T
     ) async throws -> T {
-        let token = try await addRollbackObserver(callback)
+        let token = try await addRollbackObserver(lifetime: .scoped, callback)
         defer { token.cancel() }
         return try await body()
     }
@@ -524,8 +535,8 @@ extension SQLiteConnection {
     /// can be registered on the same connection.
     ///
     /// ```swift
-    /// let token = connection.addUpdateObserver { event in
-    ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
+    /// let token = connection.addUpdateObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("\(event.table) row \(event.rowID) was \(event.operation)")
     /// }
     /// // Clean up the observer when no longer needed:
     /// token.cancel()
@@ -533,14 +544,14 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when update events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addUpdateObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteUpdateHookCallback) -> SQLiteHookToken {
+    public func addUpdateObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteUpdateHookCallback) -> SQLiteHookToken {
         let id = UUID()
         withBuckets { $0.update[id] = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+        return SQLiteHookToken(lifetime: lifetime) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.update.removeValue(forKey: id) }
             self.uninstallDispatcherIfNeeded(kind: .update)
@@ -553,22 +564,22 @@ extension SQLiteConnection {
     /// not interfere with the commit process. They cannot veto commits.
     ///
     /// ```swift
-    /// let token = connection.addCommitObserver { event in
-    ///     logger.info("Transaction committed: \(event)")
-    ///     metrics.increment("commits")
+    /// let token = connection.addCommitObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("Transaction committed: \(event)")
+    ///     self?.metrics.increment("commits")
     /// }
     /// ```
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addCommitObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitObserver) -> SQLiteHookToken {
+    public func addCommitObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteCommitObserver) -> SQLiteHookToken {
         let id = UUID()
         withBuckets { $0.commitObservers[id] = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+        return SQLiteHookToken(lifetime: lifetime) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.commitObservers.removeValue(forKey: id) }
             self.uninstallDispatcherIfNeeded(kind: .commit)
@@ -581,21 +592,21 @@ extension SQLiteConnection {
     /// the commit. Use this for business rule validation, constraints, or access control.
     ///
     /// ```swift
-    /// let token = connection.addCommitValidator { event in
+    /// let token = connection.setCommitValidator(lifetime: .pinned) { [weak self] event in
     ///     // Perform validation logic here
-    ///     return businessRules.validate(event) ? .allow : .deny
+    ///     return self?.businessRules.validate(event) == true ? .allow : .deny
     /// }
     /// ```
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The validator lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
-    public func setCommitValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitValidator) -> SQLiteHookToken {
+    public func setCommitValidator(lifetime: ObserverLifetime, _ callback: @escaping SQLiteCommitValidator) -> SQLiteHookToken {
         withBuckets { $0.commitValidator = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+        return SQLiteHookToken(lifetime: lifetime) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.commitValidator = nil }
             self.uninstallDispatcherIfNeeded(kind: .commit)
@@ -608,21 +619,21 @@ extension SQLiteConnection {
     /// registered on the same connection.
     ///
     /// ```swift
-    /// let token = connection.addRollbackObserver { event in
-    ///     print("Transaction was rolled back at \(event.date)")
+    /// let token = connection.addRollbackObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("Transaction was rolled back at \(event.date)")
     /// }
     /// ```
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when rollback events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addRollbackObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteRollbackHookCallback) -> SQLiteHookToken {
+    public func addRollbackObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteRollbackHookCallback) -> SQLiteHookToken {
         let id = UUID()
         withBuckets { $0.rollback[id] = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+        return SQLiteHookToken(lifetime: lifetime) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.rollback.removeValue(forKey: id) }
             self.uninstallDispatcherIfNeeded(kind: .rollback)
@@ -636,21 +647,21 @@ extension SQLiteConnection {
     /// the authorizer validator (if any) has not denied the operation.
     ///
     /// ```swift
-    /// let token = connection.addAuthorizerObserver { event in
-    ///     print("Database access: \(event.action) on \(event.parameter1 ?? "N/A")")
+    /// let token = connection.addAuthorizerObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("Database access: \(event.action) on \(event.parameter1 ?? "N/A")")
     /// }
     /// ```
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addAuthorizerObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerObserver) -> SQLiteHookToken {
+    public func addAuthorizerObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteAuthorizerObserver) -> SQLiteHookToken {
         let id = UUID()
         withBuckets { $0.authorizerObservers[id] = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+        return SQLiteHookToken(lifetime: lifetime) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.authorizerObservers.removeValue(forKey: id) }
             self.uninstallDispatcherIfNeeded(kind: .authorizer)
@@ -664,9 +675,9 @@ extension SQLiteConnection {
     /// Setting a new validator replaces any existing validator.
     ///
     /// ```swift
-    /// let token = connection.setAuthorizerValidator { event in
+    /// let token = connection.setAuthorizerValidator(lifetime: .pinned) { [weak self] event in
     ///     if event.action == .delete && event.parameter1 == "sensitive_table" {
-    ///         return .deny
+    ///         return self?.accessControl.allowDelete() == true ? .allow : .deny
     ///     }
     ///     return .allow
     /// }
@@ -674,13 +685,13 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The validator lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
-    public func setAuthorizerValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerValidator) -> SQLiteHookToken {
+    public func setAuthorizerValidator(lifetime: ObserverLifetime, _ callback: @escaping SQLiteAuthorizerValidator) -> SQLiteHookToken {
         withBuckets { $0.authorizerValidator = callback }
         installDispatcherIfNeeded()
-        return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+        return SQLiteHookToken(lifetime: lifetime) { [weak self] in
             guard let self else { return }
             self.withBuckets { $0.authorizerValidator = nil }
             self.uninstallDispatcherIfNeeded(kind: .authorizer)
@@ -700,8 +711,8 @@ extension SQLiteConnection {
     /// can be registered on the same connection.
     ///
     /// ```swift
-    /// let token = try await connection.addUpdateObserver { event in
-    ///     print("\(event.table) row \(event.rowID) was \(event.operation)")
+    /// let token = try await connection.addUpdateObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("\(event.table) row \(event.rowID) was \(event.operation)")
     /// }
     /// // Clean up the observer when no longer needed:
     /// token.cancel()
@@ -709,15 +720,15 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when update events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addUpdateObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteUpdateHookCallback) async throws -> SQLiteHookToken {
+    public func addUpdateObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteUpdateHookCallback) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
             self.withBuckets { $0.update[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            return SQLiteHookToken(lifetime: lifetime) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.update.removeValue(forKey: id) }
                 self.uninstallDispatcherIfNeeded(kind: .update)
@@ -731,23 +742,23 @@ extension SQLiteConnection {
     /// not interfere with the commit process. They cannot veto commits.
     ///
     /// ```swift
-    /// let token = try await connection.addCommitObserver { event in
-    ///     logger.info("Transaction committed: \(event)")
-    ///     metrics.increment("commits")
+    /// let token = try await connection.addCommitObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("Transaction committed: \(event)")
+    ///     self?.metrics.increment("commits")
     /// }
     /// ```
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addCommitObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitObserver) async throws -> SQLiteHookToken {
+    public func addCommitObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteCommitObserver) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
             self.withBuckets { $0.commitObservers[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            return SQLiteHookToken(lifetime: lifetime) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.commitObservers.removeValue(forKey: id) }
                 self.uninstallDispatcherIfNeeded(kind: .commit)
@@ -761,22 +772,22 @@ extension SQLiteConnection {
     /// the commit. Use this for business rule validation, constraints, or access control.
     ///
     /// ```swift
-    /// let token = try await connection.addCommitValidator { event in
+    /// let token = try await connection.setCommitValidator(lifetime: .pinned) { [weak self] event in
     ///     // Perform validation logic here
-    ///     return businessRules.validate(event) ? .allow : .deny
+    ///     return self?.businessRules.validate(event) == true ? .allow : .deny
     /// }
     /// ```
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The validator lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
-    public func setCommitValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteCommitValidator) async throws -> SQLiteHookToken {
+    public func setCommitValidator(lifetime: ObserverLifetime, _ callback: @escaping SQLiteCommitValidator) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             self.withBuckets { $0.commitValidator = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            return SQLiteHookToken(lifetime: lifetime) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.commitValidator = nil }
                 self.uninstallDispatcherIfNeeded(kind: .commit)
@@ -790,22 +801,22 @@ extension SQLiteConnection {
     /// registered on the same connection.
     ///
     /// ```swift
-    /// let token = try await connection.addRollbackObserver { event in
-    ///     print("Transaction was rolled back at \(event.date)")
+    /// let token = try await connection.addRollbackObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("Transaction was rolled back at \(event.date)")
     /// }
     /// ```
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when rollback events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addRollbackObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteRollbackHookCallback) async throws -> SQLiteHookToken {
+    public func addRollbackObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteRollbackHookCallback) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
             self.withBuckets { $0.rollback[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            return SQLiteHookToken(lifetime: lifetime) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.rollback.removeValue(forKey: id) }
                 self.uninstallDispatcherIfNeeded(kind: .rollback)
@@ -820,22 +831,22 @@ extension SQLiteConnection {
     /// the authorizer validator (if any) has not denied the operation.
     ///
     /// ```swift
-    /// let token = try await connection.addAuthorizerObserver { event in
-    ///     print("Database access: \(event.action) on \(event.parameter1 ?? "N/A")")
+    /// let token = try await connection.addAuthorizerObserver(lifetime: .pinned) { [weak self] event in
+    ///     self?.logger.info("Database access: \(event.action) on \(event.parameter1 ?? "N/A")")
     /// }
     /// ```
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the observer when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The observer lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
-    public func addAuthorizerObserver(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerObserver) async throws -> SQLiteHookToken {
+    public func addAuthorizerObserver(lifetime: ObserverLifetime, _ callback: @escaping SQLiteAuthorizerObserver) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             let id = UUID()
             self.withBuckets { $0.authorizerObservers[id] = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            return SQLiteHookToken(lifetime: lifetime) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.authorizerObservers.removeValue(forKey: id) }
                 self.uninstallDispatcherIfNeeded(kind: .authorizer)
@@ -850,9 +861,9 @@ extension SQLiteConnection {
     /// Setting a new validator replaces any existing validator.
     ///
     /// ```swift
-    /// let token = try await connection.setAuthorizerValidator { event in
+    /// let token = try await connection.setAuthorizerValidator(lifetime: .pinned) { [weak self] event in
     ///     if event.action == .delete && event.parameter1 == "sensitive_table" {
-    ///         return .deny
+    ///         return self?.accessControl.allowDelete() == true ? .allow : .deny
     ///     }
     ///     return .allow
     /// }
@@ -860,14 +871,14 @@ extension SQLiteConnection {
     ///
     /// - Important: Registration is thread-safe. Callbacks are invoked on SQLite's
     ///   internal thread; hop to your own actor or event loop as needed.
-    /// - Parameter autoCancel: Whether the token should automatically cancel the validator when deallocated. Defaults to `false`.
+    /// - Parameter lifetime: The validator lifetime behavior. See ``ObserverLifetime`` for details. Use `.scoped` for automatic cleanup on token deallocation, or `.pinned` for explicit cleanup only.
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
-    public func setAuthorizerValidator(autoCancel: Bool = false, _ callback: @escaping SQLiteAuthorizerValidator) async throws -> SQLiteHookToken {
+    public func setAuthorizerValidator(lifetime: ObserverLifetime, _ callback: @escaping SQLiteAuthorizerValidator) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             self.withBuckets { $0.authorizerValidator = callback }
             self.installDispatcherIfNeeded()
-            return SQLiteHookToken(autoCancel: autoCancel) { [weak self] in
+            return SQLiteHookToken(lifetime: lifetime) { [weak self] in
                 guard let self else { return }
                 self.withBuckets { $0.authorizerValidator = nil }
                 self.uninstallDispatcherIfNeeded(kind: .authorizer)
