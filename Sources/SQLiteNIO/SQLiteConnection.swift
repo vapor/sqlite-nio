@@ -42,13 +42,15 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 /// Represents a single open connection to an SQLite database, either on disk or in memory.
 ///
 /// `SQLiteConnection` wraps a single `sqlite3*` handle and provides fully asynchronous,
-/// Swift-concurrency–friendly access to SQLite as well as a **multiplexed hook API** that
-/// lets you register *many* Swift observers even though SQLite exposes only one slot per
+/// Swift-concurrency–friendly access to SQLite, as well as a multiplexed hook API that
+/// lets you register many Swift observers even though SQLite exposes only one slot per
 /// hook in C.
 ///
 /// ### Storage
+///
 /// Choose how the underlying database is created when opening a connection via
 /// ``SQLiteConnection/Storage``:
+///
 /// - ``SQLiteConnection/Storage/memory`` – transient; lives only as long as the connection.
 ///   Not shareable across processes (and, with `SQLITE_OMIT_SHARED_CACHE`, not across multiple
 ///   connections in-process). Great for unit tests and scratch work.
@@ -56,13 +58,15 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 ///   connections/processes subject to SQLite locking rules. Prefer absolute paths.
 ///
 /// ### Observable Hooks
+///
 /// Each connection can fan out these SQLite hooks to multiple callbacks:
-/// - **Update** – row-level `INSERT` / `UPDATE` / `DELETE` events. See `addUpdateObserver(lifetime:_:)`.
-/// - **Commit** – transaction about to commit; use `setCommitValidator(lifetime:_:)` to veto commits
-///   or `addCommitObserver(lifetime:_:)` for side-effect-only observation.
-/// - **Rollback** – transaction was rolled back. See `addRollbackObserver(lifetime:_:)`.
-/// - **Authorizer** – per-statement access control; use `setAuthorizerValidator(lifetime:_:)` for access control
-///   or `addAuthorizerObserver(lifetime:_:)` for side-effect-only observation.
+///
+/// - Update – row-level `INSERT` / `UPDATE` / `DELETE` events. See ``SQLiteConnection/addUpdateObserver(lifetime:_:)``.
+/// - Commit – transaction about to commit; use ``SQLiteConnection/setCommitValidator(lifetime:_:)`` to veto commits
+///    or ``SQLiteConnection/addCommitObserver(lifetime:_:)`` for side-effect-only observation.
+/// - Rollback – transaction was rolled back. See ``SQLiteConnection/addRollbackObserver(lifetime:_:)``.
+/// - Authorizer – per-statement access control; use ``SQLiteConnection/setAuthorizerValidator(lifetime:_:)`` for access control
+///    or ``SQLiteConnection/addAuthorizerObserver(lifetime:_:)`` for side-effect-only observation.
 ///
 /// ### Observer Registration Styles
 ///
@@ -73,7 +77,8 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 /// | Scoped | `with…Observer` | Active only for closure duration | Auto | Handy for tests / temporary instrumentation. |
 ///
 /// ### Threading
-/// Registration is thread-safe. **Callbacks run on SQLite's internal thread**, not your event
+///
+/// Registration is thread-safe. Callbacks run on SQLite's internal thread, not your event
 /// loop or actor. Hop if needed:
 ///
 /// ```swift
@@ -83,12 +88,12 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 /// ```
 ///
 /// ### Cleanup
-/// - Dropping a ``SQLiteHookToken`` with `.scoped` lifetime auto-cancels on deallocation.
-/// - Dropping a ``SQLiteHookToken`` with `.pinned` lifetime triggers a debug assertion but leaves the observer active.
-/// - Call `token.cancel()` to stop an observer early (works for both lifetimes).
-/// - All observers are torn down automatically when the connection closes; later cancels are safe.
-/// - See ``ObserverLifetime`` for detailed lifetime behavior.
 ///
+/// - Dropping a ``SQLiteHookToken`` with ``SQLObserverLifetime/scoped`` lifetime auto-cancels on deallocation.
+/// - Dropping a ``SQLiteHookToken`` with ``SQLObserverLifetime/pinned`` lifetime triggers a debug assertion but leaves the observer active.
+/// - Call ``SQLiteHookToken/cancel()`` to stop an observer early (works for both lifetimes).
+/// - All observers are torn down automatically when the connection closes; later cancels are safe.
+/// - See ``SQLiteObserverLifetime`` for detailed lifetime behavior.
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.
     public enum Storage: Equatable, Sendable {
