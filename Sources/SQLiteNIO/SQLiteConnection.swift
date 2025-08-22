@@ -221,7 +221,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     let threadPool: NIOThreadPool
     
     /// Container for storing multiple observers per hook type.
-    let observerBuckets = NIOLockedValueBox<ObserverBuckets>(ObserverBuckets())
+    let observerBuckets = NIOLockedValueBox<ObserverBuckets>(.init())
 
     /// Initialize a new ``SQLiteConnection``. Internal use only.
     private init(
