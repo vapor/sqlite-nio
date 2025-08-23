@@ -103,7 +103,7 @@ public final class SQLiteCustomFunction: Hashable {
         self.identity = Identity(name: name, nArg: argumentCount ?? -1)
         self.pure = pure
         self.indirect = indirect
-        self.kind = .aggregate { Aggregate() }
+        self.kind = .aggregate { aggregate.init() }
     }
 
     /// Invokes `sqlite3_create_function_v2()` to install a custom function.
