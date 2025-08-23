@@ -6,11 +6,20 @@ import CSQLite
 // MARK: - Hook Types and Events
 
 /// Observer lifetime management for SQLite hooks.
-public enum SQLiteObserverLifetime: Hashable, Sendable {
+public struct SQLiteObserverLifetime: RawRepresentable, Hashable, Sendable {
+    /// The raw lifetime value.
+    public let rawValue: Int32
+
+    /// Creates a new SQLiteObserverLifetime with the given raw value.
+    /// For unknown values, this still creates an instance - use the static properties for known lifetimes.
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+
     /// Observer automatically cancels when the token is deallocated.
-    case scoped
+    public static let scoped = SQLiteObserverLifetime(rawValue: 0)
     /// Observer remains active until explicitly canceled.
-    case pinned
+    public static let pinned = SQLiteObserverLifetime(rawValue: 1)
 }
 
 /// Represents the type of update operation that triggered the update hook.
@@ -20,16 +29,16 @@ public struct SQLiteUpdateOperation: RawRepresentable, Hashable, Sendable {
 
     /// Creates a new SQLiteUpdateOperation with the given raw value.
     /// For unknown values, this still creates an instance - use the static properties for known operations.
-    public init?(rawValue: Int32) {
+    public init(rawValue: Int32) {
         self.rawValue = rawValue
     }
 
     /// An INSERT operation.
-    public static let insert = SQLiteUpdateOperation(rawValue: SQLITE_INSERT)!
+    public static let insert = SQLiteUpdateOperation(rawValue: SQLITE_INSERT)
     /// An UPDATE operation.
-    public static let update = SQLiteUpdateOperation(rawValue: SQLITE_UPDATE)!
+    public static let update = SQLiteUpdateOperation(rawValue: SQLITE_UPDATE)
     /// A DELETE operation.
-    public static let delete = SQLiteUpdateOperation(rawValue: SQLITE_DELETE)!
+    public static let delete = SQLiteUpdateOperation(rawValue: SQLITE_DELETE)
 }
 
 /// Event produced by the update hook.
@@ -53,86 +62,95 @@ public struct SQLiteAuthorizerAction: RawRepresentable, Hashable, Sendable {
 
     /// Creates a new SQLiteAuthorizerAction with the given raw value.
     /// For unknown values, this still creates an instance - use the static properties for known actions.
-    public init?(rawValue: Int32) {
+    public init(rawValue: Int32) {
         self.rawValue = rawValue
     }
 
     /// Create index.
-    public static let createIndex = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_INDEX)!
+    public static let createIndex = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_INDEX)
     /// Create table.
-    public static let createTable = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TABLE)!
+    public static let createTable = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TABLE)
     /// Create temporary index.
-    public static let createTempIndex = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_INDEX)!
+    public static let createTempIndex = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_INDEX)
     /// Create temporary table.
-    public static let createTempTable = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_TABLE)!
+    public static let createTempTable = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_TABLE)
     /// Create temporary trigger.
-    public static let createTempTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_TRIGGER)!
+    public static let createTempTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_TRIGGER)
     /// Create temporary view.
-    public static let createTempView = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_VIEW)!
+    public static let createTempView = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TEMP_VIEW)
     /// Create trigger.
-    public static let createTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TRIGGER)!
+    public static let createTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_TRIGGER)
     /// Create view.
-    public static let createView = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_VIEW)!
+    public static let createView = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_VIEW)
     /// Delete from table.
-    public static let delete = SQLiteAuthorizerAction(rawValue: SQLITE_DELETE)!
+    public static let delete = SQLiteAuthorizerAction(rawValue: SQLITE_DELETE)
     /// Drop index.
-    public static let dropIndex = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_INDEX)!
+    public static let dropIndex = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_INDEX)
     /// Drop table.
-    public static let dropTable = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TABLE)!
+    public static let dropTable = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TABLE)
     /// Drop temporary index.
-    public static let dropTempIndex = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_INDEX)!
+    public static let dropTempIndex = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_INDEX)
     /// Drop temporary table.
-    public static let dropTempTable = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_TABLE)!
+    public static let dropTempTable = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_TABLE)
     /// Drop temporary trigger.
-    public static let dropTempTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_TRIGGER)!
+    public static let dropTempTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_TRIGGER)
     /// Drop temporary view.
-    public static let dropTempView = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_VIEW)!
+    public static let dropTempView = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TEMP_VIEW)
     /// Drop trigger.
-    public static let dropTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TRIGGER)!
+    public static let dropTrigger = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_TRIGGER)
     /// Drop view.
-    public static let dropView = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_VIEW)!
+    public static let dropView = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_VIEW)
     /// Insert into table.
-    public static let insert = SQLiteAuthorizerAction(rawValue: SQLITE_INSERT)!
+    public static let insert = SQLiteAuthorizerAction(rawValue: SQLITE_INSERT)
     /// Pragma statement.
-    public static let pragma = SQLiteAuthorizerAction(rawValue: SQLITE_PRAGMA)!
+    public static let pragma = SQLiteAuthorizerAction(rawValue: SQLITE_PRAGMA)
     /// Read from table/column.
-    public static let read = SQLiteAuthorizerAction(rawValue: SQLITE_READ)!
+    public static let read = SQLiteAuthorizerAction(rawValue: SQLITE_READ)
     /// Select statement.
-    public static let select = SQLiteAuthorizerAction(rawValue: SQLITE_SELECT)!
+    public static let select = SQLiteAuthorizerAction(rawValue: SQLITE_SELECT)
     /// Transaction operation.
-    public static let transaction = SQLiteAuthorizerAction(rawValue: SQLITE_TRANSACTION)!
+    public static let transaction = SQLiteAuthorizerAction(rawValue: SQLITE_TRANSACTION)
     /// Update table/column.
-    public static let update = SQLiteAuthorizerAction(rawValue: SQLITE_UPDATE)!
+    public static let update = SQLiteAuthorizerAction(rawValue: SQLITE_UPDATE)
     /// Attach database.
-    public static let attach = SQLiteAuthorizerAction(rawValue: SQLITE_ATTACH)!
+    public static let attach = SQLiteAuthorizerAction(rawValue: SQLITE_ATTACH)
     /// Detach database.
-    public static let detach = SQLiteAuthorizerAction(rawValue: SQLITE_DETACH)!
+    public static let detach = SQLiteAuthorizerAction(rawValue: SQLITE_DETACH)
     /// Alter table.
-    public static let alterTable = SQLiteAuthorizerAction(rawValue: SQLITE_ALTER_TABLE)!
+    public static let alterTable = SQLiteAuthorizerAction(rawValue: SQLITE_ALTER_TABLE)
     /// Reindex.
-    public static let reindex = SQLiteAuthorizerAction(rawValue: SQLITE_REINDEX)!
+    public static let reindex = SQLiteAuthorizerAction(rawValue: SQLITE_REINDEX)
     /// Analyze.
-    public static let analyze = SQLiteAuthorizerAction(rawValue: SQLITE_ANALYZE)!
+    public static let analyze = SQLiteAuthorizerAction(rawValue: SQLITE_ANALYZE)
     /// Create virtual table.
-    public static let createVTable = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_VTABLE)!
+    public static let createVTable = SQLiteAuthorizerAction(rawValue: SQLITE_CREATE_VTABLE)
     /// Drop virtual table.
-    public static let dropVTable = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_VTABLE)!
+    public static let dropVTable = SQLiteAuthorizerAction(rawValue: SQLITE_DROP_VTABLE)
     /// Function call.
-    public static let function = SQLiteAuthorizerAction(rawValue: SQLITE_FUNCTION)!
+    public static let function = SQLiteAuthorizerAction(rawValue: SQLITE_FUNCTION)
     /// Savepoint operation.
-    public static let savepoint = SQLiteAuthorizerAction(rawValue: SQLITE_SAVEPOINT)!
+    public static let savepoint = SQLiteAuthorizerAction(rawValue: SQLITE_SAVEPOINT)
     /// Copy operation.
-    public static let copy = SQLiteAuthorizerAction(rawValue: SQLITE_COPY)!
+    public static let copy = SQLiteAuthorizerAction(rawValue: SQLITE_COPY)
     /// Recursive operation.
-    public static let recursive = SQLiteAuthorizerAction(rawValue: SQLITE_RECURSIVE)!
+    public static let recursive = SQLiteAuthorizerAction(rawValue: SQLITE_RECURSIVE)
 }
 
 /// The response from a commit hook callback.
-public enum SQLiteCommitResponse: Int32, Hashable, Sendable {
+public struct SQLiteCommitResponse: RawRepresentable, Hashable, Sendable {
+    /// The raw response value.
+    public let rawValue: Int32
+
+    /// Creates a new SQLiteCommitResponse with the given raw value.
+    /// For unknown values, this still creates an instance - use the static properties for known responses.
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+
     /// Allow the commit to proceed.
-    case allow = 0
+    public static let allow = SQLiteCommitResponse(rawValue: 0)
     /// Deny the commit (causes transaction rollback).
-    case deny = 1
+    public static let deny = SQLiteCommitResponse(rawValue: 1)
 }
 
 /// The response from an authorizer callback.
@@ -142,16 +160,16 @@ public struct SQLiteAuthorizerResponse: RawRepresentable, Hashable, Sendable {
 
     /// Creates a new SQLiteAuthorizerResponse with the given raw value.
     /// For unknown values, this still creates an instance - use the static properties for known responses.
-    public init?(rawValue: Int32) {
+    public init(rawValue: Int32) {
         self.rawValue = rawValue
     }
 
     /// Allow the operation.
-    public static let allow = SQLiteAuthorizerResponse(rawValue: SQLITE_OK)!
+    public static let allow = SQLiteAuthorizerResponse(rawValue: SQLITE_OK)
     /// Deny the operation.
-    public static let deny = SQLiteAuthorizerResponse(rawValue: SQLITE_DENY)!
+    public static let deny = SQLiteAuthorizerResponse(rawValue: SQLITE_DENY)
     /// Ignore the operation (treat column as NULL).
-    public static let ignore = SQLiteAuthorizerResponse(rawValue: SQLITE_IGNORE)!
+    public static let ignore = SQLiteAuthorizerResponse(rawValue: SQLITE_IGNORE)
 }
 
 /// Event produced by the authorizer hook.
@@ -189,15 +207,23 @@ public struct SQLiteRollbackEvent: Hashable, Sendable {
 // MARK: - Hook Tokens and Identifiers
 
 /// Represents the different types of database hooks available.
-fileprivate enum SQLiteHookKind: Hashable, Sendable {
+fileprivate struct SQLiteHookKind: RawRepresentable, Hashable, Sendable {
+    /// The raw hook kind value.
+    fileprivate let rawValue: Int32
+
+    /// Creates a new SQLiteHookKind with the given raw value.
+    fileprivate init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+
     /// Update hook (fired on INSERT, UPDATE, DELETE operations)
-    case update
+    fileprivate static let update = SQLiteHookKind(rawValue: 0)
     /// Commit hook (fired before transaction commits)
-    case commit
+    fileprivate static let commit = SQLiteHookKind(rawValue: 1)
     /// Rollback hook (fired when transaction rolls back)
-    case rollback
+    fileprivate static let rollback = SQLiteHookKind(rawValue: 2)
     /// Authorizer hook (fired during statement preparation for access control)
-    case authorizer
+    fileprivate static let authorizer = SQLiteHookKind(rawValue: 3)
 }
 
 /// Returned by every `add…Observer` and `set…Validator` call, whether sync or async, of any type. Call
@@ -661,19 +687,19 @@ extension SQLiteConnection {
         self.withBuckets { buckets in
             action(&buckets)
             switch kind {
-            // Install update hook dispatcher if needed
+                // Install update hook dispatcher if needed
             case .update where !buckets.updateDispatcherInstalled && !buckets.updateHooks.isEmpty:
                 buckets.updateDispatcherInstalled = true
                 self.applyUpdateHook(enabled: true)
-            // Install commit hook dispatcher if needed (observers or validator)
+                // Install commit hook dispatcher if needed (observers or validator)
             case .commit where !buckets.commitDispatcherInstalled && (!buckets.commitObservers.isEmpty || buckets.commitValidator != nil):
                 buckets.commitDispatcherInstalled = true
                 self.applyCommitHook(enabled: true)
-            // Install rollback hook dispatcher if needed
+                // Install rollback hook dispatcher if needed
             case .rollback where !buckets.rollbackDispatcherInstalled && !buckets.rollbackHooks.isEmpty:
                 buckets.rollbackDispatcherInstalled = true
                 self.applyRollbackHook(enabled: true)
-            // Install authorizer hook dispatcher if needed (observers or validator)
+                // Install authorizer hook dispatcher if needed (observers or validator)
             case .authorizer where !buckets.authorizerDispatcherInstalled && (!buckets.authorizerObservers.isEmpty || buckets.authorizerValidator != nil):
                 buckets.authorizerDispatcherInstalled = true
                 self.applyAuthorizerHook(enabled: true)
@@ -717,11 +743,11 @@ extension SQLiteConnection {
             _ = sqlite_nio_sqlite3_update_hook(self.handle.raw, nil, nil)
             return
         }
-        
+
         let context = Unmanaged.passUnretained(self).toOpaque()
         _ = sqlite_nio_sqlite3_update_hook(self.handle.raw, { context, operation, database, table, row in
-            guard let context, let database, let table, let operation = SQLiteUpdateOperation(rawValue: operation) else { return }
-
+            guard let context, let database, let table else { return }
+            let operation = SQLiteUpdateOperation(rawValue: operation)
             let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
             let event = SQLiteUpdateEvent(operation: operation,
                                           database: String(cString: database),
@@ -803,7 +829,7 @@ extension SQLiteConnection {
         _ = sqlite_nio_sqlite3_set_authorizer(self.handle.raw, { context, action, parameter1, parameter2, database, trigger in
             guard let context else { return SQLiteAuthorizerResponse.deny.rawValue }
 
-            let actionType = SQLiteAuthorizerAction(rawValue: action)!
+            let actionType = SQLiteAuthorizerAction(rawValue: action)
             let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
             let event = SQLiteAuthorizerEvent(action: actionType,
                                               parameter1: parameter1.map { String(cString: $0) },
