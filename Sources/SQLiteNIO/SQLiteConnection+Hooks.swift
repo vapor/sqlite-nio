@@ -1,7 +1,12 @@
 import Foundation
 import NIOConcurrencyHelpers
 import NIOCore
+
+#if SQLCipher
+import CSQLCipher
+#else
 import CSQLite
+#endif
 
 // MARK: - Hook Types and Events
 
