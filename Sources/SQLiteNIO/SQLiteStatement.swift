@@ -1,5 +1,9 @@
 import NIOCore
+#if SQLCipher
+import CSQLCipher
+#else
 import CSQLite
+#endif
 
 struct SQLiteStatement {
     private var handle: OpaquePointer?
