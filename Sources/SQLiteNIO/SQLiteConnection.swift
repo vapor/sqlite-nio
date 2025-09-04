@@ -1,3 +1,4 @@
+import NIOConcurrencyHelpers
 import NIOCore
 import NIOPosix
 import CSQLite
@@ -39,6 +40,60 @@ final class SQLiteConnectionHandle: @unchecked Sendable {
 }
 
 /// Represents a single open connection to an SQLite database, either on disk or in memory.
+///
+/// `SQLiteConnection` wraps a single `sqlite3*` handle and provides fully asynchronous,
+/// Swift-concurrency–friendly access to SQLite, as well as a multiplexed hook API that
+/// lets you register many Swift observers even though SQLite exposes only one slot per
+/// hook in C.
+///
+/// ### Storage
+///
+/// Choose how the underlying database is created when opening a connection via
+/// ``SQLiteConnection/Storage``:
+///
+/// - ``SQLiteConnection/Storage/memory`` – transient; lives only as long as the connection.
+///   Not shareable across processes (and, with `SQLITE_OMIT_SHARED_CACHE`, not across multiple
+///   connections in-process). Great for unit tests and scratch work.
+/// - ``SQLiteConnection/Storage/file(path:)`` – persisted on disk; can be opened by multiple
+///   connections/processes subject to SQLite locking rules. Prefer absolute paths.
+///
+/// ### Observable Hooks
+///
+/// Each connection can fan out these SQLite hooks to multiple callbacks:
+///
+/// - Update – row-level `INSERT` / `UPDATE` / `DELETE` events. See ``SQLiteConnection/addUpdateObserver(lifetime:_:)``.
+/// - Commit – transaction about to commit; use ``SQLiteConnection/setCommitValidator(lifetime:_:)`` to veto commits
+///    or ``SQLiteConnection/addCommitObserver(lifetime:_:)`` for side-effect-only observation.
+/// - Rollback – transaction was rolled back. See ``SQLiteConnection/addRollbackObserver(lifetime:_:)``.
+/// - Authorizer – per-statement access control; use ``SQLiteConnection/setAuthorizerValidator(lifetime:_:)`` for access control
+///    or ``SQLiteConnection/addAuthorizerObserver(lifetime:_:)`` for side-effect-only observation.
+///
+/// ### Observer Registration Styles
+///
+/// | Style | API | Lifetime | Cleanup | Notes |
+/// |------|-----|----------|---------|-------|
+/// | Token-Based (Scoped) | `add…Observer(lifetime: .scoped)` | Until ``SQLiteHookToken`` deallocated | Auto on token dealloc | Use for temporary observation. |
+/// | Token-Based (Pinned) | `add…Observer(lifetime: .pinned)` | Until ``SQLiteHookToken`` canceled | `token.cancel()` | Use for long-lived observation. |
+/// | Scoped | `with…Observer` | Active only for closure duration | Auto | Handy for tests / temporary instrumentation. |
+///
+/// ### Threading
+///
+/// Registration is thread-safe. Callbacks run on SQLite's internal thread, not your event
+/// loop or actor. Hop if needed:
+///
+/// ```swift
+/// let token = try await db.addUpdateObserver(lifetime: .pinned) { [weak self] event in
+///     Task { await self?.myActor.handle(event) }   // hop to actor
+/// }
+/// ```
+///
+/// ### Cleanup
+///
+/// - Dropping a ``SQLiteHookToken`` with ``SQLObserverLifetime/scoped`` lifetime auto-cancels on deallocation.
+/// - Dropping a ``SQLiteHookToken`` with ``SQLObserverLifetime/pinned`` lifetime triggers a debug assertion but leaves the observer active.
+/// - Call ``SQLiteHookToken/cancel()`` to stop an observer early (works for both lifetimes).
+/// - All observers are torn down automatically when the connection closes; later cancels are safe.
+/// - See ``SQLiteObserverLifetime`` for detailed lifetime behavior.
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.
     public enum Storage: Equatable, Sendable {
@@ -163,8 +218,11 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     let handle: SQLiteConnectionHandle
     
     /// The thread pool used by this connection when calling libsqlite3 APIs.
-    private let threadPool: NIOThreadPool
+    let threadPool: NIOThreadPool
     
+    /// Container for storing multiple observers per hook type.
+    let observerBuckets = NIOLockedValueBox<ObserverBuckets>(.init())
+
     /// Initialize a new ``SQLiteConnection``. Internal use only.
     private init(
         handle: OpaquePointer?,
@@ -248,6 +306,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// - Returns: A future indicating completion of connection closure.
     public func close() -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            self.clearAllHooks()
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }
@@ -356,6 +415,7 @@ extension SQLiteConnection {
     /// No further operations may be performed on the connection after calling this method.
     public func close() async throws {
         try await self.threadPool.runIfActive {
+            self.clearAllHooks()
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }

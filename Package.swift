@@ -82,7 +82,6 @@ var sqliteCSettings: [CSetting] { [
     .define("SQLITE_ENABLE_UNLOCK_NOTIFY"),
     .define("SQLITE_MAX_VARIABLE_NUMBER", to: "250000"),
     .define("SQLITE_LIKE_DOESNT_MATCH_BLOBS"),
-    .define("SQLITE_OMIT_AUTHORIZATION"),
     .define("SQLITE_OMIT_COMPLETE"),
     .define("SQLITE_OMIT_DEPRECATED"),
     .define("SQLITE_OMIT_DESERIALIZE"),
