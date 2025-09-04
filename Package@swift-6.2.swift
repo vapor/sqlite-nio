@@ -107,7 +107,7 @@ let package = Package(
     traits: [
         .trait(name: Traits.SQLite, description: "Enable SQLite without encryption"),
         .trait(name: Traits.SQLCipher, description: "Enable SQLCipher encryption support for encrypted databases"),
-        .default(enabledTraits: [Traits.SQLite])
+        .default(enabledTraits: [])
     ],
     dependencies: dependencies,
     targets: targets
@@ -119,6 +119,8 @@ var swiftSettings: [SwiftSetting] { [
     .enableUpcomingFeature("ForwardTrailingClosures"),
     .enableUpcomingFeature("DisableOutwardActorInference"),
     .enableExperimentalFeature("StrictConcurrency=complete"),
+    .define("REQUIRES_TRAIT_CHOICE"),
+    .define(Traits.SQLite, .when(traits: [Traits.SQLite])),
     .define(Traits.SQLCipher, .when(traits: [Traits.SQLCipher]))
 ] }
 
