@@ -16,13 +16,13 @@ jobs:
     container: swift:6.1-noble
     steps:
       - name: Check out package
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with: { path: 'sqlite-nio' }
       - name: Check out SQLKit driver
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with: { repository: 'vapor/sqlite-kit', path: 'sqlite-kit' }
       - name: Check out FluentKit driver
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with: { repository: 'vapor/fluent-sqlite-driver', path: 'fluent-sqlite-driver' }
       - name: Tell dependents to use local checkout
         run: |
