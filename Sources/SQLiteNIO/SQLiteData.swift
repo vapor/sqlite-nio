@@ -1,4 +1,4 @@
-import CSQLite
+import VaporCSQLite
 import NIOCore
 
 /// Encapsulates a single data item provided by or to SQLite.

@@ -48,10 +48,10 @@ struct VendorSQLite: CommandPlugin {
         }
         
         // Find C target
-        guard let target = try context.package.targets(named: ["CSQLite"]).first.flatMap({ $0 as? ClangSourceModuleTarget }) else {
-            throw VendoringError("Unable to find the CSQLite target in package.")
+        guard let target = try context.package.targets(named: ["VaporCSQLite"]).first.flatMap({ $0 as? ClangSourceModuleTarget }) else {
+            throw VendoringError("Unable to find the VaporCSQLite target in package.")
         }
-        if self.verbose { Diagnostics.progress("Found CSQLite target with path \(target.directory)") }
+        if self.verbose { Diagnostics.progress("Found VaporCSQLite target with path \(target.directory)") }
 
         // Load current version
         guard let line = try await target.directory.appending("version.txt").fileUrl.lines.first(where: { !$0.starts(with: "//") }),
