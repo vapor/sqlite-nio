@@ -1,0 +1,2 @@
+// This directory contains SQLCipher sources downloaded from https://api.github.com/repos/sqlcipher/sqlcipher/tarball/v4.10.0
+4.10.0
