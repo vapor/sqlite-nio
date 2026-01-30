@@ -1,13 +1,25 @@
 import CSQLite
 import NIOCore
 
+#if _pointerBitWidth(_64)
+/// We use `Int` on 64-bit systems due to public API breakage concerns.
+public typealias SQLiteInt64 = Int // 64-bit platform, Int = 64 bits
+#elseif _pointerBitWidth(_32)
+public typealias SQLiteInt64 = Int64 // On 32-bit platforms, we want to use 64 bit integers.
+#else
+/// If you hit errors here, you may simply need to add a new architectural bit size above (e.g. _128)
+/// when that exists. Or, if [this proposal for pointerBitWidth](https://forums.swift.org/t/pitch-pointer-bit-width-compile-time-conditional/59572)
+/// ever lands in a published Swift version, then the above conditionals may need to be adjusted:
+#error("Unsupported integer size")
+#endif
+
 /// Encapsulates a single data item provided by or to SQLite.
 ///
 /// SQLite supports four data type "affinities" - INTEGER, REAL, TEXT, and BLOB - plus the `NULL` value, which has no
 /// innate affinity.
 public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable {
     /// `INTEGER` affinity, represented in Swift by `Int`.
-    case integer(Int)
+    case integer(SQLiteInt64)
 
     /// `REAL` affinity, represented in Swift by `Double`.
     case float(Double)
@@ -25,16 +37,12 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     ///
     /// If the data has `REAL` or `TEXT` affinity, an attempt is made to interpret the value as an integer. `BLOB`
     /// and `NULL` values always return `nil`.
-    public var integer: Int? {
+    public var integer: SQLiteInt64? {
         switch self {
-        case .integer(let integer):
-            return integer
-        case .float(let double):
-            return Int(double)
-        case .text(let string):
-            return Int(string)
-        case .blob, .null:
-            return nil
+        case .integer(let integer): integer
+        case .float(let double): .init(double)
+        case .text(let string): .init(string)
+        case .blob, .null: nil
         }
     }
 
@@ -137,7 +145,7 @@ extension SQLiteData {
 		case SQLITE_NULL:
 			self = .null
 		case SQLITE_INTEGER:
-			self = .integer(Int(sqlite_nio_sqlite3_value_int64(sqliteValue)))
+			self = .integer(.init(sqlite_nio_sqlite3_value_int64(sqliteValue)))
 		case SQLITE_FLOAT:
 			self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
 		case SQLITE_TEXT:
