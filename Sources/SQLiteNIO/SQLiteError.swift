@@ -1,4 +1,4 @@
-import CSQLite
+import VaporCSQLite
 import Foundation
 
 public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {

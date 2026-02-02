@@ -1,5 +1,5 @@
 import NIOCore
-import CSQLite
+import VaporCSQLite
 
 struct SQLiteStatement {
     private var handle: OpaquePointer?
