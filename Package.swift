@@ -30,7 +30,6 @@ let package = Package(
         ),
         .target(
             name: "VaporCSQLite",
-            path: "Sources/CSQLite",
             cSettings: sqliteCSettings
         ),
         .target(
