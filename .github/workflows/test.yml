@@ -5,15 +5,15 @@ concurrency:
 on:
   pull_request: { types: [opened, reopened, synchronize, ready_for_review] }
   push: { branches: [ main ] }
-env:
-  LOG_LEVEL: info
 
 jobs:
   # Make sure downstream dependents still work
   dependents-check:
     if: ${{ !(github.event.pull_request.draft || false) }}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
-    container: swift:6.1-noble
+    container: swift:6.3-noble
     steps:
       - name: Check out package
         uses: actions/checkout@v6
@@ -34,8 +34,20 @@ jobs:
         run: swift test --package-path fluent-sqlite-driver --sanitize=thread
 
   unit-tests:
+    permissions:
+      contents: read
     uses: vapor/ci/.github/workflows/run-unit-tests.yml@main
     secrets: inherit
     with:
+      with_release_mode_testing: true
+      ios_scheme_name: sqlite-nio
       with_musl: true
       with_android: true
+
+  submit-dependencies:
+    permissions:
+      contents: write
+    if: ${{ github.event_name == 'push' }}
+    uses: vapor/ci/.github/workflows/submit-deps.yml@main
+    secrets: inherit
+

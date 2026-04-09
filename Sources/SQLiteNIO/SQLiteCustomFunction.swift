@@ -353,7 +353,7 @@ extension SQLiteCustomFunction {
 ///     try await connection.query("INSERT INTO test(i) VALUES (1)").get()
 ///     try await connection.query("INSERT INTO test(i) VALUES (2)").get()
 ///     let sum = (try await connection.query("SELECT mysum(i) FROM test").get().first?.columns.first?.integer)!
-public protocol SQLiteCustomAggregate {
+public protocol SQLiteCustomAggregate: Sendable {
     /// Create an aggregate.
     init()
 
