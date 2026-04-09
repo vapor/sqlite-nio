@@ -1,0 +1,34 @@
+{
+  "configurations" : [
+    {
+      "id" : "D436252F-A775-4743-B5CF-7F4886796DD8",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:",
+          "identifier" : "SQLiteNIO",
+          "name" : "SQLiteNIO"
+        }
+      ]
+    },
+    "performanceAntipatternCheckerEnabled" : true,
+    "threadSanitizerEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "SQLiteNIOTests",
+        "name" : "SQLiteNIOTests"
+      }
+    }
+  ],
+  "version" : 1
+}

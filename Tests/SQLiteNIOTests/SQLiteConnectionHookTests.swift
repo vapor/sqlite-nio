@@ -211,9 +211,9 @@ final class SQLiteConnectionHookTests: XCTestCase {
             XCTAssertEqual(updates.count(), 1)
 
             token = nil // drop reference; deinit cancels
+            _ = token // silence unused warning
             try await db.exec("INSERT INTO users VALUES(2,'Fred')")
             XCTAssertEqual(updates.count(), 1)
-            _ = token // silence unused warning
         }
     }
 

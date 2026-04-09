@@ -39,6 +39,8 @@ jobs:
     uses: vapor/ci/.github/workflows/run-unit-tests.yml@main
     secrets: inherit
     with:
+      with_release_mode_testing: true
+      ios_scheme_name: sqlite-nio
       with_musl: true
       with_android: true
 

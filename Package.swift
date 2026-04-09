@@ -13,8 +13,8 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.4"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.97.1"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.11.0"),
     ],
     targets: [
         .plugin(
@@ -62,7 +62,7 @@ var swiftSettings: [SwiftSetting] { [
 ] }
 
 var sqliteCSettings: [CSetting] { [
-    // Derived from sqlite3 version 3.43.0
+    // Derived from sqlite3 version 3.53.0
     .define("SQLITE_DEFAULT_MEMSTATUS", to: "0"),
     .define("SQLITE_DISABLE_PAGECACHE_OVERFLOW_STATS"),
     .define("SQLITE_DQS", to: "0"),
@@ -95,4 +95,5 @@ var sqliteCSettings: [CSetting] { [
     .define("SQLITE_THREADSAFE", to: "1"),
     .define("SQLITE_UNTESTABLE"),
     .define("SQLITE_USE_URI"),
+    .define("HAVE_GETHOSTUUID", to: "0", .when(platforms: [.iOS])) // silences compiler warning
 ] }
