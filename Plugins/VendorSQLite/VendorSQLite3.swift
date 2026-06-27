@@ -190,7 +190,7 @@ struct VendorSQLite: CommandPlugin {
             throw VendoringError("Build command failed (unspecified reason)")
         }
 
-        let objDir = context.package.directory.appending(".build", "debug", "\(target.name).build")
+        let objDir = context.package.directory.appending(".build", "out", "Products", "Debug")
         var objSymbols: Set<Substring> = []
         for object in try FileManager.default.contentsOfDirectory(at: objDir.directoryUrl, includingPropertiesForKeys: nil)
             .filter({ $0.pathExtension == "o" })

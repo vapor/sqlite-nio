@@ -5,15 +5,3 @@
 +#pragma clang diagnostic ignored "-Wshorten-64-to-32"
  /******************************************************************************
  ** This file is an amalgamation of many separate C source files from SQLite
-@@ -182634,7 +182636,10 @@ SQLITE_API sqlite_int64 sqlite3_last_ins
-     return 0;
-   }
- #endif
--  return db->lastRowid;
-+  sqlite3_mutex_enter(db->mutex);
-+  i64 lastRowId = db->lastRowid;
-+  sqlite3_mutex_leave(db->mutex);
-+  return lastRowId;
- }
-
- /*
