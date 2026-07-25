@@ -495,7 +495,7 @@ extension SQLiteConnection {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .update, action: { $0.updateHooks[id] = callback })
-            return .init(lifetime: lifetime) { @Sendable [weak self] in
+            return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .update, action: { $0.updateHooks[id] = nil })
             }
         }
@@ -526,7 +526,7 @@ extension SQLiteConnection {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitObservers[id] = callback })
-            return .init(lifetime: lifetime) { @Sendable [weak self] in
+            return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.commitObservers[id] = nil })
             }
         }
@@ -555,7 +555,7 @@ extension SQLiteConnection {
     public func setCommitValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteCommitValidator) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = callback })
-            return .init(lifetime: lifetime) { @Sendable [weak self] in
+            return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = nil })
             }
         }
@@ -585,7 +585,7 @@ extension SQLiteConnection {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .rollback, action: { $0.rollbackHooks[id] = callback })
-            return .init(lifetime: lifetime) { @Sendable [weak self] in
+            return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .rollback, action: { $0.rollbackHooks[id] = nil })
             }
         }
@@ -616,7 +616,7 @@ extension SQLiteConnection {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerObservers[id] = callback })
-            return .init(lifetime: lifetime) { @Sendable [weak self] in
+            return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerObservers[id] = nil })
             }
         }
@@ -648,7 +648,7 @@ extension SQLiteConnection {
     public func setAuthorizerValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteAuthorizerValidator) async throws -> SQLiteHookToken {
         try await self.threadPool.runIfActive {
             self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerValidator = callback })
-            return .init(lifetime: lifetime) { @Sendable [weak self] in
+            return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.authorizerValidator = nil })
             }
         }
