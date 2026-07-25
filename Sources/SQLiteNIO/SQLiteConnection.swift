@@ -425,8 +425,8 @@ extension SQLiteConnection {
     ///
     /// - Parameter customFunction: The function to install.
 	public func install(customFunction: SQLiteCustomFunction) async throws {
-		self.logger.trace("Adding custom function \(customFunction.name)")
-		return try await self.threadPool.runIfActive {
+        return try await self.threadPool.runIfActive {
+            self.logger.trace("Adding custom function \(customFunction.name)")
             try customFunction.install(in: self)
 		}
 	}
@@ -435,8 +435,8 @@ extension SQLiteConnection {
     ///
     /// - Parameter customFunction: The function to remove.
 	public func uninstall(customFunction: SQLiteCustomFunction) async throws {
-		self.logger.trace("Removing custom function \(customFunction.name)")
-		return try await self.threadPool.runIfActive {
+        return try await self.threadPool.runIfActive {
+            self.logger.trace("Removing custom function \(customFunction.name)")
             try customFunction.uninstall(in: self)
 		}
 	}
