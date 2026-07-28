@@ -95172,6 +95172,7 @@ static const u8 iExplainColNames16[] = {
 ** If the result is not a simple column reference (if it is an expression
 ** or a constant) then useTypes 2, 3, and 4 return NULL.
 */
+__attribute__((no_sanitize("thread")))
 static const void *columnName(
   sqlite3_stmt *pStmt,     /* The statement */
   int N,                   /* Which column to get the name for */

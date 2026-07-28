@@ -19,8 +19,8 @@ struct VendorSQLite: CommandPlugin {
     static let sqliteURL = URL(string: "https://sqlite.org")!
     static let vendorPrefix = "sqlite_nio"
     
-    static var verbose = false
-    
+    nonisolated(unsafe) static var verbose = false
+
     var verbose: Bool { Self.verbose }
     
     func performCommand(context: PluginContext, arguments: [String]) async throws {
@@ -43,7 +43,7 @@ struct VendorSQLite: CommandPlugin {
         }
         
         // Clear work directory
-        for item in try FileManager.default.contentsOfDirectory(at: context.pluginWorkDirectory.directoryUrl, includingPropertiesForKeys: nil, options: .skipsSubdirectoryDescendants) {
+        for item in try FileManager.default.contentsOfDirectory(at: context.pluginWorkDirectoryURL, includingPropertiesForKeys: nil, options: .skipsSubdirectoryDescendants) {
             try FileManager.default.removeItem(at: item)
         }
         
@@ -51,10 +51,10 @@ struct VendorSQLite: CommandPlugin {
         guard let target = try context.package.targets(named: ["VaporCSQLite"]).first.flatMap({ $0 as? ClangSourceModuleTarget }) else {
             throw VendoringError("Unable to find the VaporCSQLite target in package.")
         }
-        if self.verbose { Diagnostics.progress("Found VaporCSQLite target with path \(target.directory)") }
+        if self.verbose { Diagnostics.progress("Found VaporCSQLite target with path \(target.directoryURL.path(percentEncoded: false))") }
 
         // Load current version
-        guard let line = try await target.directory.appending("version.txt").fileUrl.lines.first(where: { !$0.starts(with: "//") }),
+        guard let line = try await target.directoryURL.appending(component: "version.txt").lines.first(where: { !$0.starts(with: "//") }),
               let currentVersion = SemanticVersion(line)
         else {
             throw VendoringError("Could not read version stamp.")
@@ -80,12 +80,12 @@ struct VendorSQLite: CommandPlugin {
 
         // MARK: Prefix the symbols in the new sources.
         try await self.prefixFile(
-            at: target.publicHeadersDirectory!.appending("\(Self.vendorPrefix)_sqlite3.h"),
+            at: target.publicHeadersDirectoryURL!.appending(component: "\(Self.vendorPrefix)_sqlite3.h"),
             using: symbols,
             in: context
         )
         try await self.prefixFile(
-            at: target.directory.appending("\(Self.vendorPrefix)_sqlite3.c"),
+            at: target.directoryURL.appending(component: "\(Self.vendorPrefix)_sqlite3.c"),
             using: symbols,
             in: context
         )
@@ -95,7 +95,7 @@ struct VendorSQLite: CommandPlugin {
         // This directory is generated from SQLite sources downloaded from \(latestData.downloadURL.absoluteString)
         \(latestData.version)
         
-        """.write(to: target.directory.appending("version.txt").fileUrl, atomically: true, encoding: .utf8)
+        """.write(to: target.directoryURL.appending(component: "version.txt"), atomically: true, encoding: .utf8)
 
         Diagnostics.progress("Upgraded from \(currentVersion) to \(latestData.version)")
     }
@@ -134,33 +134,33 @@ struct VendorSQLite: CommandPlugin {
         context: PluginContext,
         target: ClangSourceModuleTarget
     ) async throws {
-        let zipPath = context.pluginWorkDirectory.appending(latestData.filename)
+        let zipURL = context.pluginWorkDirectoryURL.appending(component: latestData.filename)
 
         if self.verbose { Diagnostics.progress("Starting download from \(latestData.downloadURL.absoluteString)") }
-        try Process.run("curl", "-f\(self.verbose ? "" : "sS")Lo", "\(zipPath)", latestData.downloadURL.absoluteString)
+        try Process.run("curl", "-f\(self.verbose ? "" : "sS")Lo", "\(zipURL.path(percentEncoded: false))", latestData.downloadURL.absoluteString)
 
-        let zipSize = try zipPath.fileUrl.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        let zipSize = try zipURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
         guard zipSize == latestData.sizeInBytes else {
-            throw VendoringError("Download \(zipPath) wrong size (expected \(latestData.sizeInBytes), got \(zipSize ?? -1))")
+            throw VendoringError("Download \(zipURL.path(percentEncoded: false)) wrong size (expected \(latestData.sizeInBytes), got \(zipSize ?? -1))")
         }
 
-        let sha3Hash = try await Process.popen("sha3sum", "-a", "256", "\(zipPath)").prefix(while: { !$0.isWhitespace })
+        let sha3Hash = try await Process.popen("sha3sum", "-a", "256", "\(zipURL.path(percentEncoded: false))").prefix(while: { !$0.isWhitespace })
         guard sha3Hash == latestData.sha3Hash else {
-            throw VendoringError("Download \(zipPath) has wrong hash (expected \(latestData.sha3Hash), got \(sha3Hash))")
+            throw VendoringError("Download \(zipURL.path(percentEncoded: false)) has wrong hash (expected \(latestData.sha3Hash), got \(sha3Hash))")
         }
 
-        try Process.run("unzip", "-\(self.verbose ? "" : "q")j", "-d", "\(context.pluginWorkDirectory)", "\(zipPath)")
-        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectory)", "-p1", "-u", "-i", "\(Path(#filePath).replacingLastComponent(with: "001-warnings-and-data-race.patch"))"
-        )
+        try Process.run("unzip", "-\(self.verbose ? "" : "q")j", "-d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "\(zipURL.path(percentEncoded: false))")
+        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "001-warnings-and-data-race.patch"))")
+        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "002-tsan-false-positives.patch"))")
 
         try FileManager.default.replaceItem(
-            at: target.publicHeadersDirectory!.appending("\(Self.vendorPrefix)_sqlite3.h").fileUrl,
-            withItemAt: context.pluginWorkDirectory.appending("sqlite3.h").fileUrl,
+            at: target.publicHeadersDirectoryURL!.appending(component: "\(Self.vendorPrefix)_sqlite3.h"),
+            withItemAt: context.pluginWorkDirectoryURL.appending(component: "sqlite3.h"),
             backupItemName: nil, resultingItemURL: nil
         )
         try FileManager.default.replaceItem(
-            at: target.directory.appending("\(Self.vendorPrefix)_sqlite3.c").fileUrl,
-            withItemAt: context.pluginWorkDirectory.appending("sqlite3.c").fileUrl,
+            at: target.directoryURL.appending(component: "\(Self.vendorPrefix)_sqlite3.c"),
+            withItemAt: context.pluginWorkDirectoryURL.appending(component: "sqlite3.c"),
             backupItemName: nil, resultingItemURL: nil
         )
     }
@@ -170,9 +170,9 @@ struct VendorSQLite: CommandPlugin {
         if self.verbose { Diagnostics.progress("Starting symbol graph generation") }
         let symbolGraphFile = try self.packageManager.getSymbolGraph(for: target, options: .init(
             minimumAccessLevel: .public, includeSynthesized: false, includeSPI: false, emitExtensionBlocks: false
-        )).directoryPath.appending("\(target.name).symbols.json")
-        
-        let symbolGraph = try JSONDecoder().decode(SymbolGraph.self, from: Data(contentsOf: symbolGraphFile.fileUrl))
+        )).directoryURL.appending(component: "\(target.name).symbols.json")
+
+        let symbolGraph = try JSONDecoder().decode(SymbolGraph.self, from: Data(contentsOf: symbolGraphFile))
         
         let graphSymbols = Set(symbolGraph.symbols.compactMap {
             ($0.kind.identifier == "swift.func" ? $0.identifier.precise.dropFirst("c:@F@".count) :
@@ -190,9 +190,9 @@ struct VendorSQLite: CommandPlugin {
             throw VendoringError("Build command failed (unspecified reason)")
         }
 
-        let objDir = context.package.directory.appending(".build", "out", "Products", "Debug")
+        let objDir = context.package.directoryURL.appending(components: ".build", "out", "Products", "Debug")
         var objSymbols: Set<Substring> = []
-        for object in try FileManager.default.contentsOfDirectory(at: objDir.directoryUrl, includingPropertiesForKeys: nil)
+        for object in try FileManager.default.contentsOfDirectory(at: objDir, includingPropertiesForKeys: nil)
             .filter({ $0.pathExtension == "o" })
         {
             objSymbols.formUnion(try await Process.popen("nm", "-gUj", object.path).split(separator: "\n").map { $0.dropFirst() })
@@ -214,20 +214,20 @@ struct VendorSQLite: CommandPlugin {
         return commonPrefixSymbols
     }
     
-    private func prefixFile(at file: Path, using symbols: [Substring], in context: PluginContext) async throws {
+    private func prefixFile(at file: URL, using symbols: [Substring], in context: PluginContext) async throws {
         do { // Make sure the file handles are closed before we move the output into place.
-            let reader = try FileHandle(forReadingFrom: file.fileUrl)
+            let reader = try FileHandle(forReadingFrom: file)
             defer { try? reader.close() }
             
-            let outputFile = context.pluginWorkDirectory.appending(file.lastComponent)
+            let outputFile = context.pluginWorkDirectoryURL.appending(component: file.lastPathComponent)
             // `FileHandle(forWritingTo:)` refuses to create new files.
-            FileManager.default.createFile(atPath: outputFile.string, contents: nil)
-            let writer = try FileHandle(forWritingTo: outputFile.fileUrl)
+            FileManager.default.createFile(atPath: outputFile.path(percentEncoded: false), contents: nil)
+            let writer = try FileHandle(forWritingTo: outputFile)
             defer { try? writer.close() }
             
             let minimalCommonPrefix = symbols.reduce(symbols[0]) { $1.commonPrefix(with: $0, options: .literal)[...] }
             
-            Diagnostics.progress("Prefixing symbols in \(file.lastComponent) (minimum prefix \(minimalCommonPrefix))...")
+            Diagnostics.progress("Prefixing symbols in \(file.lastPathComponent) (minimum prefix \(minimalCommonPrefix))...")
             for try await line in reader.bytes.keepingEmptySubsequencesLines {
                 let oline = line.contains(minimalCommonPrefix) ?
                     symbols.reduce(line, { $0.replacingOccurrences(of: $1, with: "\(Self.vendorPrefix)_\($1)") }) :
@@ -238,8 +238,8 @@ struct VendorSQLite: CommandPlugin {
         }
         
         try FileManager.default.replaceItem(
-            at: file.fileUrl,
-            withItemAt: context.pluginWorkDirectory.appending(file.lastComponent).fileUrl,
+            at: file,
+            withItemAt: context.pluginWorkDirectoryURL.appending(component: file.lastPathComponent),
             backupItemName: nil, resultingItemURL: nil
         )
     }

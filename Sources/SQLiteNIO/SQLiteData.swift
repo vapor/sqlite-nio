@@ -1,13 +1,22 @@
 import VaporCSQLite
 import NIOCore
 
+/// On 32-bit platforms, use an explicitly 64-bit integer type. On other platforms, use the platform-native
+/// integer width, as we don't expect to ever support platforms with less than 32 bits. Most users will not
+/// be affected by the addition of this typealias.
+#if _pointerBitWidth(_32)
+public typealias SQLiteInt64 = Int64
+#else
+public typealias SQLiteInt64 = Int
+#endif
+
 /// Encapsulates a single data item provided by or to SQLite.
 ///
 /// SQLite supports four data type "affinities" - INTEGER, REAL, TEXT, and BLOB - plus the `NULL` value, which has no
 /// innate affinity.
 public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable {
     /// `INTEGER` affinity, represented in Swift by `Int`.
-    case integer(Int)
+    case integer(SQLiteInt64)
 
     /// `REAL` affinity, represented in Swift by `Double`.
     case float(Double)
@@ -25,16 +34,12 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     ///
     /// If the data has `REAL` or `TEXT` affinity, an attempt is made to interpret the value as an integer. `BLOB`
     /// and `NULL` values always return `nil`.
-    public var integer: Int? {
+    public var integer: SQLiteInt64? {
         switch self {
-        case .integer(let integer):
-            return integer
-        case .float(let double):
-            return Int(double)
-        case .text(let string):
-            return Int(string)
-        case .blob, .null:
-            return nil
+        case .integer(let integer): integer
+        case .float(let double):    .init(double)
+        case .text(let string):     .init(string)
+        case .blob, .null:          nil
         }
     }
 
@@ -44,14 +49,10 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// and `NULL` values always return `nil`.
     public var double: Double? {
         switch self {
-        case .integer(let integer):
-            return Double(integer)
-        case .float(let double):
-            return double
-        case .text(let string):
-            return Double(string)
-        case .blob, .null:
-            return nil
+        case .integer(let integer): .init(integer)
+        case .float(let double):    double
+        case .text(let string):     .init(string)
+        case .blob, .null:          nil
         }
     }
 
@@ -61,14 +62,10 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// return `nil`.
     public var string: String? {
         switch self {
-        case .integer(let integer):
-            return String(integer)
-        case .float(let double):
-            return String(double)
-        case .text(let string):
-            return string
-        case .blob, .null:
-            return nil
+        case .integer(let integer): .init(integer)
+        case .float(let double):    .init(double)
+        case .text(let string):     string
+        case .blob, .null:          nil
         }
     }
     
@@ -78,42 +75,38 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// `0`, or `nil` for all other cases.
     public var bool: Bool? {
        switch self.integer {
-            case 1: return true
-            case 0: return false
-            default: return nil
+            case 1:  true
+            case 0:  false
+            default: nil
         }
     }
 
     /// Returns the data as a blob, if it has `BLOB` affinity.
     ///
     /// `INTEGER`, `REAL`, `TEXT`, and `NULL` values always return `nil`.
-	public var blob: ByteBuffer? {
-		switch self {
-		case .blob(let buffer):
-			return buffer
-		case .integer, .float, .text, .null:
-			return nil
-		}
-	}
+    public var blob: ByteBuffer? {
+        switch self {
+        case .blob(let buffer):              buffer
+        case .integer, .float, .text, .null: nil
+        }
+    }
 
     /// `true` if the value is `NULL`, `false` otherwise.
-	public var isNull: Bool {
-		switch self {
-		case .null:
-			return true
-		case .integer, .float, .text, .blob:
-			return false
-		}
-	}
+    public var isNull: Bool {
+        switch self {
+        case .null: true
+        default:    false
+        }
+    }
 
     // See `CustomStringConvertible.description`.
     public var description: String {
         switch self {
-        case .blob(let data): return "<\(data.readableBytes) bytes>"
-        case .float(let float): return float.description
-        case .integer(let int): return int.description
-        case .null: return "null"
-        case .text(let text): return #""\#(text)""#
+        case .blob(let data):   "<\(data.readableBytes) bytes>"
+        case .float(let float): float.description
+        case .integer(let int): int.description
+        case .null:             "null"
+        case .text(let text):   #""\#(text)""#
         }
     }
 
@@ -122,42 +115,43 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
         var container = encoder.singleValueContainer()
         switch self {
         case .integer(let value): try container.encode(value)
-        case .float(let value): try container.encode(value)
-        case .text(let value): try container.encode(value)
-        case .blob(let value): try container.encode(Array(value.readableBytesView)) // N.B.: Don't use ByteBuffer's Codable conformance; it encodes as Base64, not raw bytes
-        case .null: try container.encodeNil()
+        case .float(let value):   try container.encode(value)
+        case .text(let value):    try container.encode(value)
+        case .blob(let value):    try container.encode(Array(value.readableBytesView)) // N.B.: Don't use ByteBuffer's Codable conformance; it encodes as Base64, not raw bytes
+        case .null:               try container.encodeNil()
         }
     }
 }
 
 extension SQLiteData {
     /// Attempt to interpret an `sqlite3_value` as an equivalent ``SQLiteData``.
-	init(sqliteValue: OpaquePointer) throws {
-		switch sqlite_nio_sqlite3_value_type(sqliteValue) {
-		case SQLITE_NULL:
-			self = .null
-		case SQLITE_INTEGER:
-			self = .integer(Int(sqlite_nio_sqlite3_value_int64(sqliteValue)))
-		case SQLITE_FLOAT:
-			self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
-		case SQLITE_TEXT:
+    init(sqliteValue: OpaquePointer) throws {
+        switch sqlite_nio_sqlite3_value_type(sqliteValue) {
+        case SQLITE_NULL:
+            self = .null
+        case SQLITE_INTEGER:
+            self = .integer(.init(sqlite_nio_sqlite3_value_int64(sqliteValue)))
+        case SQLITE_FLOAT:
+            self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
+        case SQLITE_TEXT:
             if let raw = sqlite_nio_sqlite3_value_text(sqliteValue) {
                 self = .text(String.init(cString: raw))
             } else {
                 self = .text("")
             }
-		case SQLITE_BLOB:
-			if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
-				let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
+        case SQLITE_BLOB:
+            if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
+                let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
                 let buffer = ByteBuffer(bytes: UnsafeRawBufferPointer(start: bytes, count: count))
-				self = .blob(buffer) // copy bytes
-			} else {
-				self = .blob(ByteBuffer())
-			}
-		case let type:
+
+                self = .blob(buffer) // copy bytes
+            } else {
+                self = .blob(.init())
+            }
+        case let type:
             throw SQLiteCustomFunctionUnexpectedValueTypeError(type: type)
-		}
-	}
+        }
+    }
   
     /// The error thrown by ``init(sqliteValue:)`` if an `sqlite3_value` has an unknown type.
     ///

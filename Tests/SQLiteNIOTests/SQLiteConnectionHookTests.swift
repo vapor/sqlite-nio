@@ -1,12 +1,13 @@
 import SQLiteNIO
-import XCTest
+import Testing
 import NIOConcurrencyHelpers
 
-final class SQLiteConnectionHookTests: XCTestCase {
-
+@Suite("SQLite Connection Hook Tests")
+struct SQLiteConnectionHookTests {
     // MARK: Update
 
-    func testUpdateHookInsert() async throws {
+    @Test
+    func updateHookInsert() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
                 try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
@@ -15,15 +16,16 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Alice')")
 
-            XCTAssertEqual(updates.count(), 1)
-            let event = try XCTUnwrap(updates.all().first)
-            XCTAssertEqual(event.operation, .insert)
-            XCTAssertEqual(event.table, "users")
-            XCTAssertEqual(event.rowID, 1)
+            #expect(updates.count() == 1)
+            let event = try #require(updates.all().first)
+            #expect(event.operation == .insert)
+            #expect(event.table == "users")
+            #expect(event.rowID == 1)
         }
     }
 
-    func testUpdateHookCRUD() async throws {
+    @Test
+    func updateHookCRUD() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
                 try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
@@ -34,13 +36,14 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("UPDATE products SET value='B' WHERE id=1")
             try await db.exec("DELETE FROM products WHERE id=1")
 
-            XCTAssertEqual(updates.count(), 3)
+            #expect(updates.count() == 3)
             let ops = updates.all().map(\.operation)
-            XCTAssertEqual(ops, [.insert, .update, .delete])
+            #expect(ops == [.insert, .update, .delete])
         }
     }
 
-    func testMultipleUpdateObservers() async throws {
+    @Test
+    func multipleUpdateObservers() async throws {
         try await withOpenedConnection { db in
             let (c1, _) = try await withCollector(db) { box in
                 try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
@@ -52,29 +55,30 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Bob')")
 
-            XCTAssertEqual(c1.count(), 1)
-            XCTAssertEqual(c2.count(), 1)
+            #expect(c1.count() == 1)
+            #expect(c2.count() == 1)
         }
     }
 
-    func testUpdateObserverCancellation() async throws {
+    @Test
+    func updateObserverCancellation() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
             let token = try await db.addUpdateObserver(lifetime: .pinned) { event in updates.append(event) }
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Carla')")
-            XCTAssertEqual(updates.count(), 1)
+            #expect(updates.count() == 1)
 
             token.cancel()
             try await db.exec("INSERT INTO users(name) VALUES('Dana')")
-            XCTAssertEqual(updates.count(), 1) // unchanged
+            #expect(updates.count() == 1) // unchanged
         }
     }
 
     // MARK: Commit / Rollback
 
-    private func assertCommit(abort: Bool) async throws {
+    private func assertCommit(abort: Bool, sourceLocation: SourceLocation = #_sourceLocation()) async throws {
         try await withOpenedConnection { db in
             let (commits, _) = try await withCollector(db) { box in
                 try await db.setCommitValidator(lifetime: .pinned) { _ in box.append(()); return abort ? .deny : .allow }
@@ -83,23 +87,22 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE items(id INT)")
             if abort {
-                do {
-                    try await db.exec("COMMIT")
-                    XCTFail("Expected COMMIT to fail due to observer veto")
-                } catch {
-                    // expected
-                }
+                await #expect(throws: (any Error).self, sourceLocation: sourceLocation) { try await db.exec("COMMIT") }
             } else {
                 try await db.exec("COMMIT")
             }
-            XCTAssertEqual(commits.count(), 1)
+            #expect(commits.count() == 1)
         }
     }
 
-    func testCommitHookAllow()  async throws { try await assertCommit(abort: false) }
-    func testCommitHookAbort()  async throws { try await assertCommit(abort: true ) }
+    @Test
+    func commitHookAllow()  async throws { try await assertCommit(abort: false) }
 
-    func testCommitObserversAggregateVeto() async throws {
+    @Test
+    func commitHookAbort()  async throws { try await assertCommit(abort: true ) }
+
+    @Test
+    func commitObserversAggregateVeto() async throws {
         try await withOpenedConnection { db in
             _ = try await db.addCommitObserver(lifetime: .pinned) { _ in }
             let (vetoes, _) = try await withCollector(db) { box in
@@ -108,17 +111,13 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE orders(order_number INT)")
-            do {
-                try await db.exec("COMMIT")
-                XCTFail("Expected COMMIT to fail due to observer veto")
-            } catch {
-                // expected
-            }
-            XCTAssertEqual(vetoes.count(), 1)
+            await #expect(throws: (any Error).self) { try await db.exec("COMMIT") }
+            #expect(vetoes.count() == 1)
         }
     }
 
-    func testRollbackHookExplicitAndImplicit() async throws {
+    @Test
+    func rollbackHookExplicitAndImplicit() async throws {
         try await withOpenedConnection { db in
             let (rb, _) = try await withCollector(db) { box in
                 try await db.addRollbackObserver(lifetime: .pinned) { _ in box.append(()) }
@@ -131,39 +130,36 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("CREATE TABLE inventory(id INT)")
             try await db.exec("ROLLBACK")
 
-            XCTAssertEqual(rb.count(), 2)
+            #expect(rb.count() == 2)
         }
     }
 
     // MARK: Authorizer
 
-    func testAuthorizerAllowIgnoreDeny() async throws {
+    @Test
+    func authorizerAllowIgnoreDeny() async throws {
         try await withOpenedConnection { db in
             let _ = try await db.setAuthorizerValidator(lifetime: .pinned) { event in
                 switch (event.action, event.parameter2) {
-                case (.read, "content"): return .deny
-                case (.read, "metadata"): return .ignore
-                default:                  return .allow
+                case (.read, "content"):  .deny
+                case (.read, "metadata"): .ignore
+                default:                  .allow
                 }
             }
 
             try await db.exec("CREATE TABLE documents(title INT, content INT, metadata INT)")
             try await db.exec("INSERT INTO documents VALUES(1,2,3)")
 
-            do {
-                _ = try await db.exec("SELECT content FROM documents")
-                XCTFail("Expected SELECT content to fail due to authorizer denial")
-            } catch {
-                // expected
-            }
+            await #expect(throws: (any Error).self) { _ = try await db.exec("SELECT content FROM documents") }
 
             let rows = try await db.exec("SELECT title, metadata FROM documents")
-            let row  = try XCTUnwrap(rows.first)
-            XCTAssertEqual(row.column("title")?.integer, 1)
-            XCTAssertTrue(row.column("metadata")?.isNull ?? false)
+            let row  = try #require(rows.first)
+            #expect(row.column("title")?.integer == 1)
+            #expect(row.column("metadata")?.isNull ?? false)
         }
     }
 
+    @Test
     func testAuthorizerHookDisable() async throws {
         try await withOpenedConnection { db in
             let (events, token) = try await withCollector(db) { box in
@@ -176,13 +172,14 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
             token.cancel()
             try await db.exec("SELECT * FROM settings")
-            XCTAssertEqual(events.count(), before) // no growth
+            #expect(events.count() == before) // no growth
         }
     }
 
     // MARK: Misc
 
-    func testSimultaneousUpdateAndCommitHooks() async throws {
+    @Test
+    func simultaneousUpdateAndCommitHooks() async throws {
         try await withOpenedConnection { db in
             let (u, _) = try await withCollector(db) { box in
                 try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
@@ -196,30 +193,32 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("INSERT INTO transactions VALUES(1)")
             try await db.exec("COMMIT")
 
-            XCTAssertEqual(u.count(), 1)
-            XCTAssertEqual(c.count(), 1)
+            #expect(u.count() == 1)
+            #expect(c.count() == 1)
         }
     }
 
-    func testObserverTokenDeinitCancels() async throws {
+    @Test
+    func observerTokenDeinitCancels() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
             var token: SQLiteHookToken? = try await db.addUpdateObserver(lifetime: .scoped) { event in updates.append(event) }
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users VALUES(1,'Evan')")
-            XCTAssertEqual(updates.count(), 1)
+            #expect(updates.count() == 1)
 
             token = nil // drop reference; deinit cancels
             _ = token // silence unused warning
             try await db.exec("INSERT INTO users VALUES(2,'Fred')")
-            XCTAssertEqual(updates.count(), 1)
+            #expect(updates.count() == 1)
         }
     }
 
     // MARK: - Order-of-execution
 
-    func testCommitObserversCheckedAfterUpdateHooks() async throws {
+    @Test
+    func commitObserversCheckedAfterUpdateHooks() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
                 try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
@@ -231,45 +230,37 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("CREATE TABLE logs(entry INT)") // inside txn
             try await db.exec("INSERT INTO logs VALUES(1)")
 
-            do {
-                try await db.exec("COMMIT")
-                XCTFail("Expected COMMIT to fail due to observer veto")
-            } catch {
-                // expected
-            }
+            await #expect(throws: (any Error).self) { try await db.exec("COMMIT") }
 
-            XCTAssertEqual(updates.count(), 1)
+            #expect(updates.count() == 1)
 
             // Table should not exist after rollback
-            do {
-                _ = try await db.exec("SELECT * FROM logs")
-                XCTFail("Table should not exist after rollback")
-            } catch {
-                // expected
-            }
+            await #expect(throws: (any Error).self) { _ = try await db.exec("SELECT * FROM logs") }
         }
     }
 
     // MARK: - No-hook-after-cancel
 
-    func testCancelStopsFurtherEvents() async throws {
+    @Test
+    func cancelStopsFurtherEvents() async throws {
         try await withOpenedConnection { db in
             let box = Box<SQLiteUpdateEvent>()
             let token = try await db.addUpdateObserver(lifetime: .scoped) { event in box.append(event) }
             try await makeUsersTable(in: db)
 
             try await db.exec("INSERT INTO users VALUES(1,'A')")
-            XCTAssertEqual(box.count(), 1)
+            #expect(box.count() == 1)
 
             token.cancel()
             try await db.exec("INSERT INTO users VALUES(2,'B')")
-            XCTAssertEqual(box.count(), 1)     // unchanged
+            #expect(box.count() == 1)     // unchanged
         }
     }
 
     // MARK: - Authorizer IGNORE actually NULLs result
 
-    func testIgnoreReturnsNull() async throws {
+    @Test
+    func ignoreReturnsNull() async throws {
         try await withOpenedConnection { db in
             let _ = try await db.setAuthorizerValidator(lifetime: .pinned) { event in
                 (event.action == .read && event.parameter2 == "secret") ? .ignore : .allow
@@ -278,14 +269,15 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("CREATE TABLE accounts(id INT, secret INT)")
             try await db.exec("INSERT INTO accounts VALUES(1,2)")
             let rows = try await db.exec("SELECT id,secret FROM accounts")
-            let row = try XCTUnwrap(rows.first)
-            XCTAssertNil(row.column("secret")?.integer)
+            let row = try #require(rows.first)
+            #expect(row.column("secret")?.integer == nil)
         }
     }
 
     // MARK: - Rollback hook not fired on successful txn
 
-    func testNoRollbackOnCommit() async throws {
+    @Test
+    func moRollbackOnCommit() async throws {
         try await withOpenedConnection { db in
             let (rb, _) = try await withCollector(db) { box in
                 try await db.addRollbackObserver(lifetime: .pinned) { _ in box.append(()) }
@@ -295,13 +287,14 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("CREATE TABLE sessions(session_id INT)")
             try await db.exec("COMMIT")
 
-            XCTAssertEqual(rb.count(), 0)
+            #expect(rb.count() == 0)
         }
     }
 
     // MARK: - High-volume updates (stress)
 
-    func testHundredRapidInserts() async throws {
+    @Test
+    func hundredRapidInserts() async throws {
         try await withOpenedConnection { db in
             let (updates, _) = try await withCollector(db) { box in
                 try await db.addUpdateObserver(lifetime: .pinned) { event in box.append(event) }
@@ -311,13 +304,14 @@ final class SQLiteConnectionHookTests: XCTestCase {
             for i in 0..<100 {
                 try await db.exec("INSERT INTO users(name) VALUES('user\(i)')")
             }
-            XCTAssertEqual(updates.count(), 100)
+            #expect(updates.count() == 100)
         }
     }
 
     // MARK: Scoped Observer Tests
 
-    func testWithUpdateObserverScopesRegistration() async throws {
+    @Test
+    func withUpdateObserverScopesRegistration() async throws {
         try await withOpenedConnection { db in
             let box = Box<SQLiteUpdateEvent>()
 
@@ -326,14 +320,15 @@ final class SQLiteConnectionHookTests: XCTestCase {
                 try await db.exec("INSERT INTO users(name) VALUES('Scoped')")  // DML fires update hooks
             }
 
-            XCTAssertEqual(box.count(), 1)  // Only the INSERT fires the hook
+            #expect(box.count() == 1)  // Only the INSERT fires the hook
 
             try await db.exec("INSERT INTO users(name) VALUES('Outside')")
-            XCTAssertEqual(box.count(), 1)
+            #expect(box.count() == 1)
         }
     }
 
-    func testCommitObserversSkippedOnVeto() async throws {
+    @Test
+    func commitObserversSkippedOnVeto() async throws {
         try await withOpenedConnection { db in
             let runCount = Box<Void>()
 
@@ -343,14 +338,9 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE test_table(x INT)")
 
-            do {
-                try await db.exec("COMMIT")
-                XCTFail("Expected COMMIT to fail due to validator veto")
-            } catch {
-                // expected
-            }
+            await #expect(throws: (any Error).self) { try await db.exec("COMMIT") }
 
-            XCTAssertEqual(runCount.count(), 1) // Only validator should run, observer skipped on veto
+            #expect(runCount.count() == 1) // Only validator should run, observer skipped on veto
         }
     }
 
@@ -359,7 +349,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
     // MARK: - New API Tests
 
-    func testPinnedTokenDroppedObserverPersists() async throws {
+    @Test
+    func pinnedTokenDroppedObserverPersists() async throws {
         try await withOpenedConnection { db in
             let updates = Box<SQLiteUpdateEvent>()
             // Drop token immediately - observer should persist since lifetime is .pinned
@@ -367,11 +358,12 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
             try await makeUsersTable(in: db)
             try await db.exec("INSERT INTO users(name) VALUES('Alice')")
-            XCTAssertEqual(updates.count(), 1) // Observer should still work
+            #expect(updates.count() == 1) // Observer should still work
         }
     }
 
-    func testTokensNoOpAfterConnectionClose() async throws {
+    @Test
+    func tokensNoOpAfterConnectionClose() async throws {
         let updates = Box<SQLiteUpdateEvent>()
         var token: SQLiteHookToken?
 
@@ -382,10 +374,11 @@ final class SQLiteConnectionHookTests: XCTestCase {
 
         // Token should now be a no-op
         token?.cancel() // Should not crash or cause issues
-        XCTAssertEqual(updates.count(), 0)
+        #expect(updates.count() == 0)
     }
 
-    func testValidatorReplacementAndCancellation() async throws {
+    @Test
+    func validatorReplacementAndCancellation() async throws {
         try await withOpenedConnection { db in
             let calls1 = Box<Void>()
             let calls2 = Box<Void>()
@@ -397,7 +390,7 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE test1(id INT)")
             try await db.exec("COMMIT")
-            XCTAssertEqual(calls1.count(), 1)
+            #expect(calls1.count() == 1)
 
             // Replace with second validator
             let token2 = try await db.setCommitValidator(lifetime: .scoped) { _ in calls2.append(()); return .allow }
@@ -406,8 +399,8 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE test2(id INT)")
             try await db.exec("COMMIT")
-            XCTAssertEqual(calls1.count(), 1) // Should still be 1 (no new calls)
-            XCTAssertEqual(calls2.count(), 1) // Second validator called
+            #expect(calls1.count() == 1) // Should still be 1 (no new calls)
+            #expect(calls2.count() == 1) // Second validator called
 
             // Cancel second validator
             token2.cancel()
@@ -416,15 +409,16 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("BEGIN")
             try await db.exec("CREATE TABLE test3(id INT)")
             try await db.exec("COMMIT")
-            XCTAssertEqual(calls1.count(), 1) // Still 1
-            XCTAssertEqual(calls2.count(), 1) // Still 1
+            #expect(calls1.count() == 1) // Still 1
+            #expect(calls2.count() == 1) // Still 1
 
             // Clean up first token (should be no-op since it was replaced)
             token1.cancel()
         }
     }
 
-    func testMultipleObserversWithValidator() async throws {
+    @Test
+    func multipleObserversWithValidator() async throws {
         try await withOpenedConnection { db in
             let observer1 = Box<Void>()
             let observer2 = Box<Void>()
@@ -438,15 +432,17 @@ final class SQLiteConnectionHookTests: XCTestCase {
             try await db.exec("CREATE TABLE test(id INT)")
             try await db.exec("COMMIT")
 
-            XCTAssertEqual(validatorCalls.count(), 1)
-            XCTAssertEqual(observer1.count(), 1) // Both observers should run
-            XCTAssertEqual(observer2.count(), 1)
+            #expect(validatorCalls.count() == 1)
+            #expect(observer1.count() == 1) // Both observers should run
+            #expect(observer2.count() == 1)
         }
     }
 
     // MARK: – logging bootstrap
 
-    override class func setUp() { XCTAssert(isLoggingConfigured) }
+    init() {
+        #expect(isLoggingConfigured)
+    }
 }
 
 // MARK: – helpers

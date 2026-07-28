@@ -1,0 +1,12 @@
+diff --git a/Sources/VaporCSQLite/sqlite_nio_sqlite3.c b/Sources/VaporCSQLite/sqlite_nio_sqlite3.c
+index 76bd8bc..14ae657 100644
+--- a/Sources/VaporCSQLite/sqlite_nio_sqlite3.c
++++ b/Sources/VaporCSQLite/sqlite_nio_sqlite3.c
+@@ -95172,6 +95172,7 @@ static const u8 iExplainColNames16[] = {
+ ** If the result is not a simple column reference (if it is an expression
+ ** or a constant) then useTypes 2, 3, and 4 return NULL.
+ */
++__attribute__((no_sanitize("thread")))
+ static const void *columnName(
+   sqlite3_stmt *pStmt,     /* The statement */
+   int N,                   /* Which column to get the name for */

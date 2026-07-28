@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.1
 import PackageDescription
 
 let package = Package(
@@ -13,8 +13,8 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.97.1"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.11.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.101.3"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     ],
     targets: [
         .plugin(
@@ -39,7 +39,9 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio",
+                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
+                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
         ),
@@ -55,10 +57,11 @@ let package = Package(
 
 var swiftSettings: [SwiftSetting] { [
     .enableUpcomingFeature("ExistentialAny"),
-    .enableUpcomingFeature("ConciseMagicFile"),
-    .enableUpcomingFeature("ForwardTrailingClosures"),
-    .enableUpcomingFeature("DisableOutwardActorInference"),
-    .enableExperimentalFeature("StrictConcurrency=complete"),
+    // .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+    // .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("ImmutableWeakCaptures"),
 ] }
 
 var sqliteCSettings: [CSetting] { [

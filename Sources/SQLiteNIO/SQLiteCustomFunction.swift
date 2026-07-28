@@ -186,9 +186,9 @@ public final class SQLiteCustomFunction: Hashable {
         var definition: AnyObject {
             switch self {
             case .function(let compute):
-                return FunctionDefinition(compute: compute)
+                FunctionDefinition(compute: compute)
             case .aggregate(let makeAggregate):
-                return AggregateDefinition(makeAggregate: makeAggregate)
+                AggregateDefinition(makeAggregate: makeAggregate)
             }
         }
 
