@@ -118,6 +118,9 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         case file(path: String)
     }
 
+    /// Flags whether or not we have yet called `sqlite3_initialize()` explicitly.
+    private static let sqlite3initCalled = NIOLockedValueBox(false)
+
     /// Return the version of the embedded libsqlite3 as a 32-bit integer value.
     /// 
     /// The value is laid out identicallly to [the `SQLITE_VERSION_NUMBER` constant](c_source_id).
@@ -185,6 +188,15 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         logger: Logger,
         eventLoop: any EventLoop
     ) throws -> SQLiteConnection {
+        // This prevents data races on the sqlite3Config global inside libsqlite itself. Why skipping this was
+        // not a problem for a long time and then suddenly became one, I'm not sure, but this solves it.
+        Self.sqlite3initCalled.withLockedValue {
+            if !$0 {
+                sqlite_nio_sqlite3_initialize()
+                $0 = true
+            }
+        }
+
         let path: String
         switch storage {
         case .memory: path = ":memory:"
@@ -316,23 +328,23 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     ///
     /// - Parameter customFunction: The function to install.
     /// - Returns: A future indicating completion of the install operation.
-	public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-		self.logger.trace("Adding custom function \(customFunction.name)")
-		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+    public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            self.logger.trace("Adding custom function \(customFunction.name)")
             try customFunction.install(in: self)
-		}
-	}
+        }
+    }
 
     /// Uninstall the provided ``SQLiteCustomFunction`` from the connection.
     ///
     /// - Parameter customFunction: The function to remove.
     /// - Returns: A future indicating completion of the uninstall operation.
-	public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-		self.logger.trace("Removing custom function \(customFunction.name)")
-		return self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+    public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
+        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
+            self.logger.trace("Removing custom function \(customFunction.name)")
             try customFunction.uninstall(in: self)
-		}
-	}
+        }
+    }
 
     /// Deinitializer for ``SQLiteConnection``.
     deinit {
@@ -424,20 +436,20 @@ extension SQLiteConnection {
     /// Install the provided ``SQLiteCustomFunction`` on the connection.
     ///
     /// - Parameter customFunction: The function to install.
-	public func install(customFunction: SQLiteCustomFunction) async throws {
-        return try await self.threadPool.runIfActive {
+    public func install(customFunction: SQLiteCustomFunction) async throws {
+        try await self.threadPool.runIfActive {
             self.logger.trace("Adding custom function \(customFunction.name)")
             try customFunction.install(in: self)
-		}
-	}
+        }
+    }
 
     /// Uninstall the provided ``SQLiteCustomFunction`` from the connection.
     ///
     /// - Parameter customFunction: The function to remove.
-	public func uninstall(customFunction: SQLiteCustomFunction) async throws {
-        return try await self.threadPool.runIfActive {
+    public func uninstall(customFunction: SQLiteCustomFunction) async throws {
+        try await self.threadPool.runIfActive {
             self.logger.trace("Removing custom function \(customFunction.name)")
             try customFunction.uninstall(in: self)
-		}
-	}
+        }
+    }
 }
