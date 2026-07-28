@@ -188,15 +188,6 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         logger: Logger,
         eventLoop: any EventLoop
     ) throws -> SQLiteConnection {
-        // This prevents data races on the sqlite3Config global inside libsqlite itself. Why skipping this was
-        // not a problem for a long time and then suddenly became one, I'm not sure, but this solves it.
-        Self.sqlite3initCalled.withLockedValue {
-            if !$0 {
-                sqlite_nio_sqlite3_initialize()
-                $0 = true
-            }
-        }
-
         let path: String
         switch storage {
         case .memory: path = ":memory:"
@@ -205,7 +196,21 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
 
         var handle: OpaquePointer?
         let openOptions = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI | SQLITE_OPEN_EXRESCODE
-        let openRet = sqlite_nio_sqlite3_open_v2(path, &handle, openOptions, nil)
+        var openRet: Int32 = -1
+
+        // This prevents data races on the sqlite3Config global inside libsqlite itself. Why skipping this was
+        // not a problem for a long time and then suddenly became one, I'm not sure, but this solves it.
+        Self.sqlite3initCalled.withLockedValue {
+            if !$0 {
+                sqlite_nio_sqlite3_initialize()
+                openRet = sqlite_nio_sqlite3_open_v2(path, &handle, openOptions, nil)
+                $0 = true
+            }
+        }
+
+        if openRet == -1 {
+            openRet = sqlite_nio_sqlite3_open_v2(path, &handle, openOptions, nil)
+        }
         guard openRet == SQLITE_OK else {
             throw SQLiteError(reason: .init(statusCode: openRet), message: "Failed to open to SQLite database at \(path)")
         }
@@ -419,7 +424,14 @@ extension SQLiteConnection {
         _ binds: [SQLiteData],
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) async throws {
-        try await self.query(query, binds, onRow).get()
+        try await self.threadPool.runIfActive {
+            var statement = try SQLiteStatement(query: query, on: self)
+            let columns = try statement.columns()
+            try statement.bind(binds)
+            while let row = try statement.nextRow(for: columns) {
+                onRow(row)
+            }
+        }
     }
 
     /// Close the connection and invalidate its handle.

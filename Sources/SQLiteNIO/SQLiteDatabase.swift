@@ -41,6 +41,22 @@ public protocol SQLiteDatabase: Sendable {
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void>
     
+    /// Execute a query on the connection, calling the provided closure for each result row (if any).
+    ///
+    /// This is the primary Concurrency-based interface to connections vended via this protocol. A default
+    /// implementation is provided for protocol implementors who predate the existence of this requirement.
+    ///
+    /// - Parameters:
+    ///   - query: The query string to execute.
+    ///   - binds: An ordered list of ``SQLiteData`` items to use as bound parameters for the query.
+    ///   - onRow: A closure to invoke for each result row returned by the query, if any.
+    /// - Returns: A future completed when the query has executed and returned all results (if any).
+    func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) async throws
+
     /// Call the provided closure with a concrete ``SQLiteConnection`` instance.
     ///
     /// This method is required to provide a connection object which executes all queries directed to it in the
@@ -54,6 +70,20 @@ public protocol SQLiteDatabase: Sendable {
     func withConnection<T>(
         _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
     ) -> EventLoopFuture<T>
+
+    /// Call the provided closure with a concrete ``SQLiteConnection`` instance, concurrency version.
+    ///
+    /// This method is required to provide a connection object which executes all queries directed to it in the
+    /// same "session" (e.g. always on the same connection, such as without rotating through a pool). A default
+    /// implementation is provided for protocol implementors who predate the existence of this requirement.
+    ///
+    /// - Parameter closure: The closure to invoke. Unless the closure changes the connection's state itself or the
+    ///   connection is closed by SQLite due to error, it is guaranteed to remain valid until the future returned by
+    ///   the closure is completed or failed.
+    /// - Returns: A future signaling completion of the closure and containing the closure's result, if any.
+    func withConnection<T>(
+        _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
+    ) async throws -> T
 }
 
 /// Convenience helpers and Concurrency-aware variants.
@@ -85,21 +115,18 @@ extension SQLiteDatabase {
 
     /// Wrapper for ``query(_:_:_:)`` which returns the result rows (if any) rather than calling a closure.
     public func query(_ query: String, _ binds: [SQLiteData] = []) -> EventLoopFuture<[SQLiteRow]> {
-        #if swift(<5.10)
-        let rows: UnsafeMutableTransferBox<[SQLiteRow]> = .init([])
-        
-        return self.query(query, binds, logger: self.logger) { rows.wrappedValue.append($0) }.map { rows.wrappedValue }
-        #else
         nonisolated(unsafe) var rows: [SQLiteRow] = []
         
         return self.query(query, binds, logger: self.logger) { rows.append($0) }.map { rows }
-        #endif
     }
     
     /// Wrapper for ``query(_:_:_:)`` which returns the result rows (if any) rather than calling a
     /// closure (async version).
     public func query(_ query: String, _ binds: [SQLiteData] = []) async throws -> [SQLiteRow] {
-        try await self.query(query, binds).get()
+        nonisolated(unsafe) var rows: [SQLiteRow] = []
+
+        try await self.query(query, binds) { rows.append($0) }
+        return rows
     }
 
     /// Async version of ``withConnection(_:)-48y34``.
@@ -175,6 +202,7 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     func query(_ query: String, _ binds: [SQLiteData] = [], _ onRow: @escaping @Sendable (SQLiteRow) -> Void) -> EventLoopFuture<Void> {
         self.database.query(query, binds, onRow)
     }
+
     // See `SQLiteDatabase.query(_:_:_:)`.
     func query(_ query: String, _ binds: [SQLiteData], _ onRow: @escaping @Sendable (SQLiteRow) -> Void) async throws {
         try await self.database.query(query, binds, onRow)
@@ -184,6 +212,7 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     func query(_ query: String, _ binds: [SQLiteData] = []) -> EventLoopFuture<[SQLiteRow]> {
         self.database.query(query, binds)
     }
+    
     // See `SQLiteDatabase.query(_:_:)`.
     func query(_ query: String, _ binds: [SQLiteData] = []) async throws -> [SQLiteRow] {
         try await self.database.query(query, binds)

@@ -16,7 +16,7 @@ struct SQLiteStatement {
             &self.handle,
             nil
         )
-        // Can't use self.check() here, there's nohting to finalize yet on failure.
+        // Can't use self.check() here, there's nothing to finalize yet on failure.
         guard ret == SQLITE_OK else {
             throw SQLiteError(statusCode: ret, connection: connection)
         }

@@ -150,8 +150,8 @@ struct VendorSQLite: CommandPlugin {
         }
 
         try Process.run("unzip", "-\(self.verbose ? "" : "q")j", "-d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "\(zipURL.path(percentEncoded: false))")
-        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "001-warnings-and-data-race.patch"))"
-        )
+        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "001-warnings-and-data-race.patch"))")
+        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "002-tsan-false-positives.patch"))")
 
         try FileManager.default.replaceItem(
             at: target.publicHeadersDirectoryURL!.appending(component: "\(Self.vendorPrefix)_sqlite3.h"),
