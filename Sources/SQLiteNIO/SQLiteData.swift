@@ -27,14 +27,10 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// and `NULL` values always return `nil`.
     public var integer: Int? {
         switch self {
-        case .integer(let integer):
-            return integer
-        case .float(let double):
-            return Int(double)
-        case .text(let string):
-            return Int(string)
-        case .blob, .null:
-            return nil
+        case .integer(let integer): integer
+        case .float(let double):    .init(double)
+        case .text(let string):     .init(string)
+        case .blob, .null:          nil
         }
     }
 
@@ -44,14 +40,10 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// and `NULL` values always return `nil`.
     public var double: Double? {
         switch self {
-        case .integer(let integer):
-            return Double(integer)
-        case .float(let double):
-            return double
-        case .text(let string):
-            return Double(string)
-        case .blob, .null:
-            return nil
+        case .integer(let integer): .init(integer)
+        case .float(let double):    double
+        case .text(let string):     .init(string)
+        case .blob, .null:          nil
         }
     }
 
@@ -61,14 +53,10 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// return `nil`.
     public var string: String? {
         switch self {
-        case .integer(let integer):
-            return String(integer)
-        case .float(let double):
-            return String(double)
-        case .text(let string):
-            return string
-        case .blob, .null:
-            return nil
+        case .integer(let integer): .init(integer)
+        case .float(let double):    .init(double)
+        case .text(let string):     string
+        case .blob, .null:          nil
         }
     }
     
@@ -78,9 +66,9 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// `0`, or `nil` for all other cases.
     public var bool: Bool? {
        switch self.integer {
-            case 1: return true
-            case 0: return false
-            default: return nil
+            case 1:  true
+            case 0:  false
+            default: nil
         }
     }
 
@@ -89,31 +77,27 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// `INTEGER`, `REAL`, `TEXT`, and `NULL` values always return `nil`.
 	public var blob: ByteBuffer? {
 		switch self {
-		case .blob(let buffer):
-			return buffer
-		case .integer, .float, .text, .null:
-			return nil
+        case .blob(let buffer):              buffer
+        case .integer, .float, .text, .null: nil
 		}
 	}
 
     /// `true` if the value is `NULL`, `false` otherwise.
 	public var isNull: Bool {
 		switch self {
-		case .null:
-			return true
-		case .integer, .float, .text, .blob:
-			return false
+        case .null: true
+        default:    false
 		}
 	}
 
     // See `CustomStringConvertible.description`.
     public var description: String {
         switch self {
-        case .blob(let data): return "<\(data.readableBytes) bytes>"
-        case .float(let float): return float.description
-        case .integer(let int): return int.description
-        case .null: return "null"
-        case .text(let text): return #""\#(text)""#
+        case .blob(let data):   "<\(data.readableBytes) bytes>"
+        case .float(let float): float.description
+        case .integer(let int): int.description
+        case .null:             "null"
+        case .text(let text):   #""\#(text)""#
         }
     }
 
@@ -137,7 +121,7 @@ extension SQLiteData {
 		case SQLITE_NULL:
 			self = .null
 		case SQLITE_INTEGER:
-			self = .integer(Int(sqlite_nio_sqlite3_value_int64(sqliteValue)))
+            self = .integer(.init(sqlite_nio_sqlite3_value_int64(sqliteValue)))
 		case SQLITE_FLOAT:
 			self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
 		case SQLITE_TEXT:
@@ -150,9 +134,10 @@ extension SQLiteData {
 			if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
 				let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
                 let buffer = ByteBuffer(bytes: UnsafeRawBufferPointer(start: bytes, count: count))
+
 				self = .blob(buffer) // copy bytes
 			} else {
-				self = .blob(ByteBuffer())
+                self = .blob(.init())
 			}
 		case let type:
             throw SQLiteCustomFunctionUnexpectedValueTypeError(type: type)

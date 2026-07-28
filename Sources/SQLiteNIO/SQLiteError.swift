@@ -1,5 +1,9 @@
 import VaporCSQLite
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 
 public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
     public let reason: Reason
@@ -90,99 +94,99 @@ public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
         
         var statusCode: Int32 {
             switch self {
-            case .error: return SQLITE_ERROR
-            case .intern: return SQLITE_INTERNAL
-            case .abort: return SQLITE_ABORT
-            case .permission: return SQLITE_PERM
-            case .busy: return SQLITE_BUSY
-            case .locked: return SQLITE_LOCKED
-            case .noMemory: return SQLITE_NOMEM
-            case .readOnly: return SQLITE_READONLY
-            case .interrupt: return SQLITE_INTERRUPT
-            case .ioError: return SQLITE_IOERR
-            case .corrupt: return SQLITE_CORRUPT
-            case .notFound: return SQLITE_NOTFOUND
-            case .full: return SQLITE_FULL
-            case .cantOpen: return SQLITE_CANTOPEN
-            case .proto: return SQLITE_PROTOCOL
-            case .empty: return SQLITE_EMPTY
-            case .schema: return SQLITE_SCHEMA
-            case .tooBig: return SQLITE_TOOBIG
-            case .constraint: return SQLITE_CONSTRAINT
-            case .mismatch: return SQLITE_MISMATCH
-            case .misuse: return SQLITE_MISUSE
-            case .noLFS: return SQLITE_NOLFS
-            case .auth: return SQLITE_AUTH
-            case .format: return SQLITE_FORMAT
-            case .range: return SQLITE_RANGE
-            case .notADatabase: return SQLITE_NOTADB
-            case .notice: return SQLITE_NOTICE
-            case .warning: return SQLITE_WARNING
-            case .row: return SQLITE_ROW
-            case .done: return SQLITE_DONE
-            case .errorMissingCollatingSequence: return SQLITE_ERROR_MISSING_COLLSEQ
-            case .errorRetry: return SQLITE_ERROR_RETRY
-            case .errorMissingSnapshot: return SQLITE_ERROR_SNAPSHOT
-            case .abortByRollback: return SQLITE_ABORT_ROLLBACK
-            case .busyInRecovery: return SQLITE_BUSY_RECOVERY
-            case .busyInSnapshot: return SQLITE_BUSY_SNAPSHOT
-            case .busyTimeout: return SQLITE_BUSY_TIMEOUT
-            case .lockedBySharedCache: return SQLITE_LOCKED_SHAREDCACHE
-            case .lockedVirtualTable: return SQLITE_LOCKED_VTAB
-            case .readonlyInRecovery: return SQLITE_READONLY_RECOVERY
-            case .readonlyCantLock: return SQLITE_READONLY_CANTLOCK
-            case .readonlyInRollback: return SQLITE_READONLY_ROLLBACK
-            case .readonlyBackingMoved: return SQLITE_READONLY_DBMOVED
-            case .readonlyDirectory: return SQLITE_READONLY_DIRECTORY
-            case .ioErrorFailedRead: return SQLITE_IOERR_READ
-            case .ioErrorIncompleteRead: return SQLITE_IOERR_SHORT_READ
-            case .ioErrorFailedWrite: return SQLITE_IOERR_WRITE
-            case .ioErrorFailedSync: return SQLITE_IOERR_FSYNC
-            case .ioErrorFailedDirSync: return SQLITE_IOERR_DIR_FSYNC
-            case .ioErrorFailedTruncate: return SQLITE_IOERR_TRUNCATE
-            case .ioErrorFailedStat: return SQLITE_IOERR_FSTAT
-            case .ioErrorFailedUnlock: return SQLITE_IOERR_UNLOCK
-            case .ioErrorFailedReadLock: return SQLITE_IOERR_RDLOCK
-            case .ioErrorFailedDelete: return SQLITE_IOERR_DELETE
-            case .ioErrorNoMemory: return SQLITE_IOERR_NOMEM
-            case .ioErrorFailedAccess: return SQLITE_IOERR_ACCESS
-            case .ioErrorFailedLockCheck: return SQLITE_IOERR_LOCK
-            case .ioErrorFailedAdvisoryLock: return SQLITE_IOERR_CHECKRESERVEDLOCK
-            case .ioErrorFailedClose: return SQLITE_IOERR_CLOSE
-            case .ioErrorFailedSharedMemOpen: return SQLITE_IOERR_SHMOPEN
-            case .ioErrorFailedSharedMemSize: return SQLITE_IOERR_SHMSIZE
-            case .ioErrorFailedSharedMemMap: return SQLITE_IOERR_SHMMAP
-            case .ioErrorFailedDeleteNonexistent: return SQLITE_IOERR_DELETE_NOENT
-            case .ioErrorFailedMemoryMap: return SQLITE_IOERR_MMAP
-            case .ioErrorCantFindTempdir: return SQLITE_IOERR_GETTEMPPATH
-            case .ioErrorCygwinPath: return SQLITE_IOERR_CONVPATH
-            case .ioErrorBadDataChecksum: return SQLITE_IOERR_DATA
-            case .ioErrorCorruptedFilesystem: return SQLITE_IOERR_CORRUPTFS
-            case .corruptVirtualTable: return SQLITE_CORRUPT_VTAB
-            case .corruptSequenceSchema: return SQLITE_CORRUPT_SEQUENCE
-            case .corruptIndex: return SQLITE_CORRUPT_INDEX
-            case .cantOpenDirectory: return SQLITE_CANTOPEN_ISDIR
-            case .cantOpenInvalidPath: return SQLITE_CANTOPEN_FULLPATH
-            case .cantOpenCygwinPath: return SQLITE_CANTOPEN_CONVPATH
-            case .cantOpenUnfollowedSymlink: return SQLITE_CANTOPEN_SYMLINK
-            case .constraintCheckFailed: return SQLITE_CONSTRAINT_CHECK
-            case .constraintCommitHookFailed: return SQLITE_CONSTRAINT_COMMITHOOK
-            case .constraintForeignKeyFailed: return SQLITE_CONSTRAINT_FOREIGNKEY
-            case .constraintUserFunctionFailed: return SQLITE_CONSTRAINT_FUNCTION
-            case .constraintNotNullFailed: return SQLITE_CONSTRAINT_NOTNULL
-            case .constraintPrimaryKeyFailed: return SQLITE_CONSTRAINT_PRIMARYKEY
-            case .constraintTriggerFailed: return SQLITE_CONSTRAINT_TRIGGER
-            case .constraintUniqueFailed: return SQLITE_CONSTRAINT_UNIQUE
-            case .constraintVirtualTableFailed: return SQLITE_CONSTRAINT_VTAB
-            case .constraintUniqueRowIDFailed: return SQLITE_CONSTRAINT_ROWID
-            case .constraintUpdateTriggerDeletedRow: return SQLITE_CONSTRAINT_PINNED
-            case .constraintStrictDataTypeFailed: return SQLITE_CONSTRAINT_DATATYPE
-            case .authUnauthorizedUser: return SQLITE_AUTH_USER
-            case .noticeRecoverWAL: return SQLITE_NOTICE_RECOVER_WAL
-            case .noticeRecoverRollback: return SQLITE_NOTICE_RECOVER_ROLLBACK
-            case .warningAutoindex: return SQLITE_WARNING_AUTOINDEX
+            case .error: SQLITE_ERROR
+            case .intern: SQLITE_INTERNAL
+            case .abort: SQLITE_ABORT
+            case .permission: SQLITE_PERM
+            case .busy: SQLITE_BUSY
+            case .locked: SQLITE_LOCKED
+            case .noMemory: SQLITE_NOMEM
+            case .readOnly: SQLITE_READONLY
+            case .interrupt: SQLITE_INTERRUPT
+            case .ioError: SQLITE_IOERR
+            case .corrupt: SQLITE_CORRUPT
+            case .notFound: SQLITE_NOTFOUND
+            case .full: SQLITE_FULL
+            case .cantOpen: SQLITE_CANTOPEN
+            case .proto: SQLITE_PROTOCOL
+            case .empty: SQLITE_EMPTY
+            case .schema: SQLITE_SCHEMA
+            case .tooBig: SQLITE_TOOBIG
+            case .constraint: SQLITE_CONSTRAINT
+            case .mismatch: SQLITE_MISMATCH
+            case .misuse: SQLITE_MISUSE
+            case .noLFS: SQLITE_NOLFS
+            case .auth: SQLITE_AUTH
+            case .format: SQLITE_FORMAT
+            case .range: SQLITE_RANGE
+            case .notADatabase: SQLITE_NOTADB
+            case .notice: SQLITE_NOTICE
+            case .warning: SQLITE_WARNING
+            case .row: SQLITE_ROW
+            case .done: SQLITE_DONE
+            case .errorMissingCollatingSequence: SQLITE_ERROR_MISSING_COLLSEQ
+            case .errorRetry: SQLITE_ERROR_RETRY
+            case .errorMissingSnapshot: SQLITE_ERROR_SNAPSHOT
+            case .abortByRollback: SQLITE_ABORT_ROLLBACK
+            case .busyInRecovery: SQLITE_BUSY_RECOVERY
+            case .busyInSnapshot: SQLITE_BUSY_SNAPSHOT
+            case .busyTimeout: SQLITE_BUSY_TIMEOUT
+            case .lockedBySharedCache: SQLITE_LOCKED_SHAREDCACHE
+            case .lockedVirtualTable: SQLITE_LOCKED_VTAB
+            case .readonlyInRecovery: SQLITE_READONLY_RECOVERY
+            case .readonlyCantLock: SQLITE_READONLY_CANTLOCK
+            case .readonlyInRollback: SQLITE_READONLY_ROLLBACK
+            case .readonlyBackingMoved: SQLITE_READONLY_DBMOVED
+            case .readonlyDirectory: SQLITE_READONLY_DIRECTORY
+            case .ioErrorFailedRead: SQLITE_IOERR_READ
+            case .ioErrorIncompleteRead: SQLITE_IOERR_SHORT_READ
+            case .ioErrorFailedWrite: SQLITE_IOERR_WRITE
+            case .ioErrorFailedSync: SQLITE_IOERR_FSYNC
+            case .ioErrorFailedDirSync: SQLITE_IOERR_DIR_FSYNC
+            case .ioErrorFailedTruncate: SQLITE_IOERR_TRUNCATE
+            case .ioErrorFailedStat: SQLITE_IOERR_FSTAT
+            case .ioErrorFailedUnlock: SQLITE_IOERR_UNLOCK
+            case .ioErrorFailedReadLock: SQLITE_IOERR_RDLOCK
+            case .ioErrorFailedDelete: SQLITE_IOERR_DELETE
+            case .ioErrorNoMemory: SQLITE_IOERR_NOMEM
+            case .ioErrorFailedAccess: SQLITE_IOERR_ACCESS
+            case .ioErrorFailedLockCheck: SQLITE_IOERR_LOCK
+            case .ioErrorFailedAdvisoryLock: SQLITE_IOERR_CHECKRESERVEDLOCK
+            case .ioErrorFailedClose: SQLITE_IOERR_CLOSE
+            case .ioErrorFailedSharedMemOpen: SQLITE_IOERR_SHMOPEN
+            case .ioErrorFailedSharedMemSize: SQLITE_IOERR_SHMSIZE
+            case .ioErrorFailedSharedMemMap: SQLITE_IOERR_SHMMAP
+            case .ioErrorFailedDeleteNonexistent: SQLITE_IOERR_DELETE_NOENT
+            case .ioErrorFailedMemoryMap: SQLITE_IOERR_MMAP
+            case .ioErrorCantFindTempdir: SQLITE_IOERR_GETTEMPPATH
+            case .ioErrorCygwinPath: SQLITE_IOERR_CONVPATH
+            case .ioErrorBadDataChecksum: SQLITE_IOERR_DATA
+            case .ioErrorCorruptedFilesystem: SQLITE_IOERR_CORRUPTFS
+            case .corruptVirtualTable: SQLITE_CORRUPT_VTAB
+            case .corruptSequenceSchema: SQLITE_CORRUPT_SEQUENCE
+            case .corruptIndex: SQLITE_CORRUPT_INDEX
+            case .cantOpenDirectory: SQLITE_CANTOPEN_ISDIR
+            case .cantOpenInvalidPath: SQLITE_CANTOPEN_FULLPATH
+            case .cantOpenCygwinPath: SQLITE_CANTOPEN_CONVPATH
+            case .cantOpenUnfollowedSymlink: SQLITE_CANTOPEN_SYMLINK
+            case .constraintCheckFailed: SQLITE_CONSTRAINT_CHECK
+            case .constraintCommitHookFailed: SQLITE_CONSTRAINT_COMMITHOOK
+            case .constraintForeignKeyFailed: SQLITE_CONSTRAINT_FOREIGNKEY
+            case .constraintUserFunctionFailed: SQLITE_CONSTRAINT_FUNCTION
+            case .constraintNotNullFailed: SQLITE_CONSTRAINT_NOTNULL
+            case .constraintPrimaryKeyFailed: SQLITE_CONSTRAINT_PRIMARYKEY
+            case .constraintTriggerFailed: SQLITE_CONSTRAINT_TRIGGER
+            case .constraintUniqueFailed: SQLITE_CONSTRAINT_UNIQUE
+            case .constraintVirtualTableFailed: SQLITE_CONSTRAINT_VTAB
+            case .constraintUniqueRowIDFailed: SQLITE_CONSTRAINT_ROWID
+            case .constraintUpdateTriggerDeletedRow: SQLITE_CONSTRAINT_PINNED
+            case .constraintStrictDataTypeFailed: SQLITE_CONSTRAINT_DATATYPE
+            case .authUnauthorizedUser: SQLITE_AUTH_USER
+            case .noticeRecoverWAL: SQLITE_NOTICE_RECOVER_WAL
+            case .noticeRecoverRollback: SQLITE_NOTICE_RECOVER_ROLLBACK
+            case .warningAutoindex: SQLITE_WARNING_AUTOINDEX
             
-            case .connection, .close, .prepare, .bind, .execute: return -1
+            case .connection, .close, .prepare, .bind, .execute: -1
             }
         }
         
