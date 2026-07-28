@@ -1,9 +1,18 @@
-import XCTest
-import SQLiteNIO
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 import Logging
 import NIOCore
 import NIOPosix
+#if canImport(FoundationEssentials)
+import NIOFoundationEssentialsCompat
+#else
 import NIOFoundationCompat
+#endif
+import SQLiteNIO
+import Testing
 
 /// Run the provided closure with an opened ``SQLiteConnection`` using an in-memory database and the singleton thread
 /// pool and event loop, guaranteeing that the connection is correctly cleaned up afterwards regardless of errors.
@@ -11,11 +20,11 @@ func withOpenedConnection<T>(
     _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
 ) async throws -> T {
     let connection = try await SQLiteConnection.open(storage: .memory)
-    
+
     do {
         let result = try await closure(connection)
         try await connection.close()
-        
+
         return result
     } catch {
         try? await connection.close()
@@ -24,74 +33,83 @@ func withOpenedConnection<T>(
 
 }
 
-final class SQLiteNIOTests: XCTestCase {
-    func testBasicConnection() async throws {
+@Suite("Base SQLiteNIO tests")
+struct SQLiteNIOTests {
+    @Test
+    func basicConnection() async throws {
         try await withOpenedConnection { conn in
             let rows = try await conn.query("SELECT sqlite_version()")
 
-            XCTAssertEqual(rows.count, 1)
-            await XCTAssertNoThrowAsync(try await conn.query("PRAGMA compile_options"))
+            #expect(rows.count == 1)
+            await #expect(throws: Never.self) { try await conn.query("PRAGMA compile_options") }
         }
     }
-    
-    func testConnectionClosedThreadPool() async throws {
+
+    @Test
+    func connectionClosedThreadPool() async throws {
         let threadPool = NIOThreadPool(numberOfThreads: 1)
         try await threadPool.shutdownGracefully()
-        
+
         // This should error, but not create a leaking promise fatal error
-        await XCTAssertThrowsErrorAsync(try await SQLiteConnection.open(storage: .memory, threadPool: threadPool, on: MultiThreadedEventLoopGroup.singleton.any()))
+        await #expect(throws: (any Error).self) { try await SQLiteConnection.open(storage: .memory, threadPool: threadPool, on: MultiThreadedEventLoopGroup.singleton.any()) }
     }
 
-    func testZeroLengthBlob() async throws {
+    @Test
+    func zeroLengthBlob() async throws {
         try await withOpenedConnection { conn in
             let rows = try await conn.query("SELECT zeroblob(0) as zblob")
-        
-            XCTAssertEqual(rows.count, 1)
+
+            #expect(rows.count == 1)
         }
     }
 
-    func testDateFormat() async throws {
+    @Test
+    func dateFormat() async throws {
         try await withOpenedConnection { conn in
-            XCTAssertEqual(Date(sqliteData: .text("2023-03-10"))?.timeIntervalSince1970, 1678406400)
-            
+            #expect(Date(sqliteData: .text("2023-03-10"))?.timeIntervalSince1970 == 1678406400)
+
             let rows = try await conn.query("SELECT CURRENT_DATE")
-            XCTAssertNotNil(rows.first?.column("CURRENT_DATE").flatMap(Date.init(sqliteData:)))
+            #expect(rows.first?.column("CURRENT_DATE").flatMap(Date.init(sqliteData:)) != nil)
         }
     }
-    
-    func testDateTimeFormat() async throws {
+
+    @Test
+    func dateTimeFormat() async throws {
         try await withOpenedConnection { conn in
-            XCTAssertEqual(Date(sqliteData: .text("2023-03-10 23:54:27"))?.timeIntervalSince1970, 1678492467)
-            
+            #expect(Date(sqliteData: .text("2023-03-10 23:54:27"))?.timeIntervalSince1970 == 1678492467)
+
             let rows = try await conn.query("SELECT CURRENT_TIMESTAMP")
-            XCTAssertNotNil(rows.first?.column("CURRENT_TIMESTAMP").flatMap(Date.init(sqliteData:)))
+            #expect(rows.first?.column("CURRENT_TIMESTAMP").flatMap(Date.init(sqliteData:)) != nil)
         }
     }
-    
-    func testTimestampStorage() async throws {
+
+    @Test
+    func timestampStorage() async throws {
         try await withOpenedConnection { conn in
             // When the value is read back out of sqlite, it will have only microsecond precision, make sure we use a Date with
             // the same limit or else the test will fail.
             let date = Date(timeIntervalSinceReferenceDate: 689658914.293192)
             let rows = try await conn.query("SELECT ? as date", [date.sqliteData!])
-            XCTAssertEqual(rows.first?.column("date"), .float(date.timeIntervalSince1970))
-            XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description, date.description)
-            XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:)), date)
-            XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.timeIntervalSinceReferenceDate, date.timeIntervalSinceReferenceDate)
+            #expect(rows.first?.column("date") == .float(date.timeIntervalSince1970))
+            #expect(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description == date.description)
+            #expect(rows.first?.column("date").flatMap(Date.init(sqliteData:)) == date)
+            #expect(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.timeIntervalSinceReferenceDate == date.timeIntervalSinceReferenceDate)
         }
     }
 
-    func testDateRoundToMicroseconds() throws {
+    @Test
+    func dateRoundToMicroseconds() throws {
         let secondsSinceUnixEpoch = 1667950774.6214828
         let secondsSinceSwiftReference = 689643574.621483
         let timestamp = SQLiteData.float(secondsSinceUnixEpoch)
-        let date = try XCTUnwrap(Date(sqliteData: timestamp))
-        XCTAssertEqual(date.timeIntervalSince1970, secondsSinceUnixEpoch)
-        XCTAssertEqual(date.timeIntervalSinceReferenceDate, secondsSinceSwiftReference)
-        XCTAssertEqual(date.sqliteData, .float(secondsSinceUnixEpoch))
+        let date = try #require(Date(sqliteData: timestamp))
+        #expect(date.timeIntervalSince1970 == secondsSinceUnixEpoch)
+        #expect(date.timeIntervalSinceReferenceDate == secondsSinceSwiftReference)
+        #expect(date.sqliteData == .float(secondsSinceUnixEpoch))
     }
 
-    func testTimestampStorageInDateColumnIntegralValue() async throws {
+    @Test
+    func timestampStorageInDateColumnIntegralValue() async throws {
         try await withOpenedConnection { conn in
             let date = Date(timeIntervalSince1970: 42)
             // This is how a column of type .date is crated when using Vapor’s
@@ -99,29 +117,31 @@ final class SQLiteNIOTests: XCTestCase {
             _ = try await conn.query(#"CREATE TABLE "test" ("date" DATE NOT NULL)"#)
             _ = try await conn.query(#"INSERT INTO test (date) VALUES (?)"#, [date.sqliteData!])
             let rows = try await conn.query("SELECT * FROM test")
-            
-            XCTAssertTrue(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(Int(date.timeIntervalSince1970)))
-            XCTAssertEqual(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description, date.description)
+
+            #expect(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(Int(date.timeIntervalSince1970)))
+            #expect(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description == date.description)
         }
     }
 
-    func testDuplicateColumnName() async throws {
+    @Test
+    func duplicateColumnName() async throws {
         try await withOpenedConnection { conn in
             let rows = try await conn.query("SELECT 1 as foo, 2 as foo")
-            let row0 = try XCTUnwrap(rows.first)
+            let row0 = try #require(rows.first)
             var i = 0
             for column in row0.columns {
-                XCTAssertEqual(column.name, "foo")
+                #expect(column.name == "foo")
                 i += column.data.integer ?? 0
             }
-            XCTAssertEqual(i, 3)
-            XCTAssertEqual(row0.column("foo")?.integer, 1)
-            XCTAssertEqual(row0.columns.filter { $0.name == "foo" }.dropFirst(0).first?.data.integer, 1)
-            XCTAssertEqual(row0.columns.filter { $0.name == "foo" }.dropFirst(1).first?.data.integer, 2)
+            #expect(i == 3)
+            #expect(row0.column("foo")?.integer == 1)
+            #expect(row0.columns.filter { $0.name == "foo" }.dropFirst(0).first?.data.integer == 1)
+            #expect(row0.columns.filter { $0.name == "foo" }.dropFirst(1).first?.data.integer == 2)
         }
     }
 
-	func testCustomAggregate() async throws {
+    @Test
+    func customAggregate() async throws {
         try await withOpenedConnection { conn in
             _ = try await conn.query(#"CREATE TABLE "scores" ("score" INTEGER NOT NULL)"#)
             _ = try await conn.query(#"INSERT INTO scores (score) VALUES (?), (?), (?)"#, [.integer(3), .integer(4), .integer(5)])
@@ -141,11 +161,12 @@ final class SQLiteNIOTests: XCTestCase {
             try await conn.install(customFunction: function)
 
             let rows = try await conn.query("SELECT my_sum(score) as total_score FROM scores")
-            XCTAssertEqual(rows.first?.column("total_score")?.integer, 12)
+            #expect(rows.first?.column("total_score")?.integer == 12)
         }
-	}
+    }
 
-	func testDatabaseFunction() async throws {
+    @Test
+    func databaseFunction() async throws {
         try await withOpenedConnection { conn in
             let function = SQLiteCustomFunction("my_custom_function", argumentCount: 1, pure: true) { args in
                 Int(args[0].integer! * 3)
@@ -153,17 +174,19 @@ final class SQLiteNIOTests: XCTestCase {
 
             _ = try await conn.install(customFunction: function)
             let rows = try await conn.query("SELECT my_custom_function(2) as my_value")
-            XCTAssertEqual(rows.first?.column("my_value")?.integer, 6)
+            #expect(rows.first?.column("my_value")?.integer == 6)
         }
-	}
+    }
 
-    func testSingletonEventLoopOpen() async throws {
+    @Test
+    func singletonEventLoopOpen() async throws {
         var conn: SQLiteConnection? = nil
-        await XCTAssertNoThrowAsync(conn = try await SQLiteConnection.open(storage: .memory).get())
+        await #expect(throws: Never.self) { conn = try await SQLiteConnection.open(storage: .memory).get() }
         try await conn?.close().get()
     }
-    
-    func testSerializedConnectionAccess() async throws {
+
+    @Test
+    func serializedConnectionAccess() async throws {
         /// Although this test has no assertions, it does serve a useful purpose: when run with Thread Sanitizer
         /// enabed, it validates that we are using SQLite in "serialized" mode (e.g. it is safe to use a single
         /// connection simultaneously from multiple threads) rather than single- or multi-threaded mode.
@@ -178,14 +201,14 @@ final class SQLiteNIOTests: XCTestCase {
                     _ = try await conn.query("SELECT random()", [], { _ in })
                 }
             }
-            
+
             try await t1.value
             try await t2.value
         }
     }
 
-    override class func setUp() {
-        XCTAssert(isLoggingConfigured)
+    init() {
+        #expect(isLoggingConfigured)
     }
 }
 
