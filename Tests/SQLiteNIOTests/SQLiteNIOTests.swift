@@ -4,6 +4,7 @@ import FoundationEssentials
 import Foundation
 #endif
 import Logging
+#if canImport(NIOCore)
 import NIOCore
 import NIOPosix
 #if canImport(FoundationEssentials)
@@ -11,6 +12,7 @@ import NIOFoundationEssentialsCompat
 #else
 import NIOFoundationCompat
 #endif
+#endif  // canImport(NIOCore)
 import SQLiteNIO
 import Testing
 
