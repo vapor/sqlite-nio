@@ -97,6 +97,56 @@ struct SQLiteNIOTests {
         }
     }
 
+    /// A `BLOB` must survive the bind/column round trip byte-for-byte, including the empty case.
+    ///
+    /// The blob read in ``SQLiteStatement`` is a single expression shared by the SwiftNIO and
+    /// NIO-free builds, so its behavior is worth pinning down directly.
+    @Test
+    func blobRoundTrip() async throws {
+        try await withOpenedConnection { conn in
+            let payloads: [[UInt8]] = [[], [0x00], [0xde, 0xad, 0xbe, 0xef], .init(0...255)]
+
+            _ = try await conn.query("CREATE TABLE blobs (value BLOB)")
+            for payload in payloads {
+                _ = try await conn.query("INSERT INTO blobs (value) VALUES (?)", [.blob(ByteBuffer(bytes: payload))])
+            }
+
+            let rows = try await conn.query("SELECT value FROM blobs ORDER BY rowid")
+
+            #expect(rows.compactMap { $0.column("value")?.blob.map { Array($0.readableBytesView) } } == payloads)
+        }
+    }
+
+    /// `Data` round-trips through `BLOB` in both directions.
+    ///
+    /// Its ``SQLiteDataConvertible`` conformance is spelled so that one implementation compiles against
+    /// both `ByteBuffer` and the `[UInt8]` stand-in used where SwiftNIO is absent.
+    @Test
+    func dataRoundTrip() async throws {
+        try await withOpenedConnection { conn in
+            let payload = Data([0x00, 0x01, 0xfe, 0xff])
+
+            _ = try await conn.query("CREATE TABLE datas (value BLOB)")
+            _ = try await conn.query("INSERT INTO datas (value) VALUES (?)", [payload.sqliteData!])
+
+            let rows = try await conn.query("SELECT value FROM datas")
+
+            #expect(rows.first?.column("value").flatMap(Data.init(sqliteData:)) == payload)
+            #expect(Data(sqliteData: .blob(ByteBuffer())) == Data())
+            #expect(Data(sqliteData: .null) == nil)
+        }
+    }
+
+    /// ``SQLiteData`` encodes blobs as raw bytes rather than using `ByteBuffer`'s Base64 `Codable`
+    /// conformance. The encoding goes through `readableBytesView`, one of the members the NIO-free
+    /// build supplies for `[UInt8]`.
+    @Test
+    func blobEncodesAsRawBytes() throws {
+        let encoded = try JSONEncoder().encode([SQLiteData.blob(ByteBuffer(bytes: [0x01, 0x02, 0x03]))])
+
+        #expect(String(decoding: encoded, as: UTF8.self) == "[[1,2,3]]")
+    }
+
     @Test
     func dateFormat() async throws {
         try await withOpenedConnection { conn in

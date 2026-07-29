@@ -12,12 +12,18 @@ import WASILibc
 import CRT
 #endif
 
+#if canImport(NIOCore)
 import NIOCore
+#endif
 #if canImport(FoundationEssentials)
+#if canImport(NIOCore)
 import NIOFoundationEssentialsCompat
+#endif
 import FoundationEssentials
 #else
+#if canImport(NIOCore)
 import NIOFoundationCompat
+#endif
 import Foundation
 #endif
 
@@ -111,7 +117,9 @@ extension Data: SQLiteDataConvertible {
         guard case .blob(let value) = sqliteData else {
             return nil
         }
-        self = .init(buffer: value, byteTransferStrategy: .copy)
+        // N.B.: Spelled this way, rather than as `Data(buffer:byteTransferStrategy:)`, so that the
+        // same expression compiles against the `[UInt8]` stand-in used where SwiftNIO is absent.
+        self = .init(value.readableBytesView)
     }
 
     public var sqliteData: SQLiteData? {

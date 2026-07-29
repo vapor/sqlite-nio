@@ -1,3 +1,6 @@
+// The hook API is built on `NIOThreadPool` and `NIOLockedValueBox`; it has no NIO-free
+// counterpart, so it is elided along with the rest of the SwiftNIO surface.
+#if canImport(NIOCore)
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -869,3 +872,4 @@ extension SQLiteConnection {
         self.observerBuckets.withLockedValue { $0 = .init() }
     }
 }
+#endif  // canImport(NIOCore)
