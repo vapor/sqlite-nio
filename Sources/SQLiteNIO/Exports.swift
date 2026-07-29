@@ -49,8 +49,9 @@ extension ByteBuffer {
 /// A single-threaded stand-in for `NIOConcurrencyHelpers.NIOLockedValueBox`.
 ///
 /// The one supported SwiftNIO-free target is single-threaded, so no lock is needed and none is
-/// taken: the box exists so the `sqlite3_initialize()` guard in ``SQLiteConnection`` reads the
-/// same in both configurations. `@unchecked Sendable` is sound for the same reason.
+/// taken: the box exists so the `sqlite3_initialize()` guard and the hook observer storage in
+/// ``SQLiteConnection`` read the same in both configurations. `@unchecked Sendable` is sound for
+/// the same reason.
 final class NIOLockedValueBox<Value>: @unchecked Sendable {
     private var value: Value
 
