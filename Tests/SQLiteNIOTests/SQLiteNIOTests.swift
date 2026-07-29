@@ -63,6 +63,40 @@ struct SQLiteNIOTests {
         }
     }
 
+    /// `INTEGER` columns must round-trip the full 64-bit range; a construction site which converted
+    /// through `Int` rather than ``SQLiteInt64`` would trap above `Int32.max` on a 32-bit target.
+    @Test
+    func largeIntegerRoundTrip() async throws {
+        try await withOpenedConnection { conn in
+            let values: [SQLiteInt64] = [.max, .min, 0, 1, -1, 0x7fff_ffff, 0x8000_0000, -0x8000_0001]
+
+            _ = try await conn.query("CREATE TABLE bigints (value INTEGER)")
+            for value in values {
+                _ = try await conn.query("INSERT INTO bigints (value) VALUES (?)", [.integer(value)])
+            }
+
+            let rows = try await conn.query("SELECT value FROM bigints ORDER BY rowid")
+
+            #expect(rows.compactMap { $0.column("value")?.integer } == values)
+        }
+    }
+
+    /// The same range must survive `sqlite3_value` conversion, which is a separate code path from
+    /// column reads (it is the one custom functions see).
+    @Test
+    func largeIntegerThroughCustomFunction() async throws {
+        try await withOpenedConnection { conn in
+            let echo = SQLiteCustomFunction("echo_int", argumentCount: 1, pure: true) { args in
+                args[0].integer
+            }
+
+            _ = try await conn.install(customFunction: echo)
+            let rows = try await conn.query("SELECT echo_int(?) as value", [.integer(.max)])
+
+            #expect(rows.first?.column("value")?.integer == .max)
+        }
+    }
+
     @Test
     func dateFormat() async throws {
         try await withOpenedConnection { conn in
