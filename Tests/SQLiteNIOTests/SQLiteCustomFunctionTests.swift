@@ -271,6 +271,19 @@ struct DatabaseFunctionTests {
         }
     }
 
+    @Test
+    func uninstallRemovesFunction() async throws {
+        try await withOpenedConnection { conn in
+            let fn = SQLiteCustomFunction("removable", argumentCount: 0) { values in 1 }
+            try await conn.install(customFunction: fn)
+            #expect(try await Int(1) == conn.query("SELECT removable() as result").first?.column("result")?.integer)
+
+            try await conn.uninstall(customFunction: fn)
+
+            await #expect(throws: (any Error).self) { try await conn.query("SELECT removable()") }
+        }
+    }
+
     // MARK: - setup
 
     init() {

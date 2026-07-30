@@ -293,6 +293,33 @@ struct SQLiteNIOTests {
         }
     }
 
+    @Test
+    func lastAutoincrementIDTracksInserts() async throws {
+        try await withOpenedConnection { conn in
+            _ = try await conn.query("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+            _ = try await conn.query("INSERT INTO t (v) VALUES ('a')")
+
+            #expect(try await conn.lastAutoincrementID() == 1)
+
+            _ = try await conn.query("INSERT INTO t (v) VALUES ('b')")
+
+            #expect(try await conn.lastAutoincrementID() == 2)
+        }
+    }
+
+    @Test
+    func futuresQuerySurfaceReturnsRows() async throws {
+        try await withOpenedConnection { conn in
+            _ = try await conn.query("CREATE TABLE t (v TEXT)").get()
+            _ = try await conn.query("INSERT INTO t (v) VALUES (?)", [.text("a")]).get()
+
+            let rows = try await conn.query("SELECT v FROM t").get()
+
+            #expect(rows.count == 1)
+            #expect(try await "a" == rows.first?.column("v")?.string)
+        }
+    }
+
     init() {
         #expect(isLoggingConfigured)
     }
