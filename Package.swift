@@ -2,11 +2,10 @@
 import PackageDescription
 
 /// `.when(platforms:)` can only include, never exclude, so excluding WASI means listing everything else.
-/// This list matches the [supported platforms on the Swift 6.1 release of SPM](https://github.com/swiftlang/swift-package-manager/blob/release/6.1/Sources/PackageDescription/SupportedPlatforms.swift#L35-L71);
-/// don't add new platforms here unless raising the swift-tools-version of this manifest.
-let nonWASIPlatforms: [Platform] = [
-    .macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .openbsd,
-]
+/// This list matches the [supported platforms on the Swift 6.1 release of SPM](https://github.com/swiftlang/swift-package-manager/blob/release/6.1/Sources/PackageDescription/SupportedPlatforms.swift).
+/// Don't add new platforms here unless raising the swift-tools-version of this manifest.
+let allPlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .wasi, .openbsd]
+let nonWASIPlatforms: [Platform] = allPlatforms.filter { $0 != .wasi }
 
 let package = Package(
     name: "sqlite-nio",
