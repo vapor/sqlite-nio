@@ -1,6 +1,12 @@
 // swift-tools-version:6.1
 import PackageDescription
 
+/// `.when(platforms:)` can only include, never exclude, so excluding WASI means listing everything else.
+/// This list matches the [supported platforms on the Swift 6.1 release of SPM](https://github.com/swiftlang/swift-package-manager/blob/release/6.1/Sources/PackageDescription/SupportedPlatforms.swift).
+/// Don't add new platforms here unless raising the swift-tools-version of this manifest.
+let allPlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .wasi, .openbsd]
+let nonWASIPlatforms: [Platform] = allPlatforms.filter { $0 != .wasi }
+
 let package = Package(
     name: "sqlite-nio",
     platforms: [
@@ -37,11 +43,16 @@ let package = Package(
             dependencies: [
                 .target(name: "VaporCSQLite"),
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
+                // SwiftNIO does not support wasm32-unknown-wasip1: NIOPosix is built around POSIX
+                // sockets and threads, neither of which WASI preview 1 provides. On WASI these
+                // products are therefore not linked, and the `#if canImport(NIOCore)` gates in
+                // Sources/ drop the `EventLoopFuture` API in favor of the `async` one.
+                // (`NIOFoundationCompat` keeps its Darwin-only condition, which already excludes WASI.)
+                .product(name: "NIOCore", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
                 .product(name: "NIOFoundationCompat", package: "swift-nio",
                          condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
-                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),
+                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
             ],
             swiftSettings: swiftSettings
         ),

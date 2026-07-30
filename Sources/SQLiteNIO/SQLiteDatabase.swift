@@ -1,5 +1,7 @@
+#if canImport(NIOCore)
 import NIOCore
 import NIOPosix
+#endif
 import VaporCSQLite
 import Logging
 
@@ -12,9 +14,12 @@ public protocol SQLiteDatabase: Sendable {
     /// The logger used by the connection.
     var logger: Logger { get }
     
+    #if canImport(NIOCore)
     /// The event loop on which operations on the connection execute.
     var eventLoop: any EventLoop { get }
+    #endif
     
+    #if canImport(NIOCore)
     /// Execute a query on the connection, calling the provided closure for each result row (if any).
     ///
     /// This is the primary interface to connections vended via this protocol.
@@ -40,7 +45,8 @@ public protocol SQLiteDatabase: Sendable {
         logger: Logger,
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void>
-    
+    #endif  // canImport(NIOCore)
+
     /// Execute a query on the connection, calling the provided closure for each result row (if any).
     ///
     /// This is the primary Concurrency-based interface to connections vended via this protocol. A default
@@ -57,6 +63,7 @@ public protocol SQLiteDatabase: Sendable {
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) async throws
 
+    #if canImport(NIOCore)
     /// Call the provided closure with a concrete ``SQLiteConnection`` instance.
     ///
     /// This method is required to provide a connection object which executes all queries directed to it in the
@@ -70,6 +77,7 @@ public protocol SQLiteDatabase: Sendable {
     func withConnection<T>(
         _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
     ) -> EventLoopFuture<T>
+    #endif  // canImport(NIOCore)
 
     /// Call the provided closure with a concrete ``SQLiteConnection`` instance, concurrency version.
     ///
@@ -88,6 +96,7 @@ public protocol SQLiteDatabase: Sendable {
 
 /// Convenience helpers and Concurrency-aware variants.
 extension SQLiteDatabase {
+    #if canImport(NIOCore)
     /// Convenience method for calling ``query(_:_:logger:_:)`` with the connection's logger.
     ///
     /// Callers are strongly encouraged to always use this method or its async equivalent (``query(_:_:_:)``) instead
@@ -119,6 +128,7 @@ extension SQLiteDatabase {
         
         return self.query(query, binds, logger: self.logger) { rows.append($0) }.map { rows }
     }
+    #endif  // canImport(NIOCore)
     
     /// Wrapper for ``query(_:_:_:)`` which returns the result rows (if any) rather than calling a
     /// closure (async version).
@@ -129,6 +139,7 @@ extension SQLiteDatabase {
         return rows
     }
 
+    #if canImport(NIOCore)
     /// Async version of ``withConnection(_:)-48y34``.
     public func withConnection<T: Sendable>(
         _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
@@ -139,6 +150,7 @@ extension SQLiteDatabase {
             }
         }.get()
     }
+    #endif  // canImport(NIOCore)
 }
 
 #if swift(<5.10)
@@ -181,6 +193,7 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     // See `SQLiteDatabase.logger`.
     let logger: Logger
 
+    #if canImport(NIOCore)
     // See `SQLiteDatabase.eventLoop`.
     var eventLoop: any EventLoop { self.database.eventLoop }
     
@@ -188,11 +201,13 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     func withConnection<T>(_ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
         self.database.withConnection(closure)
     }
+    #endif  // canImport(NIOCore)
     // See `SQLiteDatabase.withConnection(_:)`.
     func withConnection<T: Sendable>(_ closure: @escaping @Sendable (SQLiteConnection) async throws -> T) async throws -> T {
         try await self.database.withConnection(closure)
     }
     
+    #if canImport(NIOCore)
     // See `SQLiteDatabase.query(_:_:_:)`.
     func query(_ query: String, _ binds: [SQLiteData], logger: Logger, _ onRow: @escaping @Sendable (SQLiteRow) -> Void) -> EventLoopFuture<Void> {
         self.database.query(query, binds, logger: logger, onRow)
@@ -202,16 +217,19 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     func query(_ query: String, _ binds: [SQLiteData] = [], _ onRow: @escaping @Sendable (SQLiteRow) -> Void) -> EventLoopFuture<Void> {
         self.database.query(query, binds, onRow)
     }
+    #endif  // canImport(NIOCore)
 
     // See `SQLiteDatabase.query(_:_:_:)`.
     func query(_ query: String, _ binds: [SQLiteData], _ onRow: @escaping @Sendable (SQLiteRow) -> Void) async throws {
         try await self.database.query(query, binds, onRow)
     }
     
+    #if canImport(NIOCore)
     // See `SQLiteDatabase.query(_:_:)`.
     func query(_ query: String, _ binds: [SQLiteData] = []) -> EventLoopFuture<[SQLiteRow]> {
         self.database.query(query, binds)
     }
+    #endif
     
     // See `SQLiteDatabase.query(_:_:)`.
     func query(_ query: String, _ binds: [SQLiteData] = []) async throws -> [SQLiteRow] {

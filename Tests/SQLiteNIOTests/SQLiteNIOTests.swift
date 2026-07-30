@@ -4,6 +4,7 @@ import FoundationEssentials
 import Foundation
 #endif
 import Logging
+#if canImport(NIOCore)
 import NIOCore
 import NIOPosix
 #if canImport(FoundationEssentials)
@@ -11,6 +12,7 @@ import NIOFoundationEssentialsCompat
 #else
 import NIOFoundationCompat
 #endif
+#endif  // canImport(NIOCore)
 import SQLiteNIO
 import Testing
 
@@ -61,6 +63,90 @@ struct SQLiteNIOTests {
 
             #expect(rows.count == 1)
         }
+    }
+
+    /// `INTEGER` columns must round-trip the full 64-bit range; a construction site which converted
+    /// through `Int` rather than ``SQLiteInt64`` would trap above `Int32.max` on a 32-bit target.
+    @Test
+    func largeIntegerRoundTrip() async throws {
+        try await withOpenedConnection { conn in
+            let values: [SQLiteInt64] = [.max, .min, 0, 1, -1, 0x7fff_ffff, 0x8000_0000, -0x8000_0001]
+
+            _ = try await conn.query("CREATE TABLE bigints (value INTEGER)")
+            for value in values {
+                _ = try await conn.query("INSERT INTO bigints (value) VALUES (?)", [.integer(value)])
+            }
+
+            let rows = try await conn.query("SELECT value FROM bigints ORDER BY rowid")
+
+            #expect(rows.compactMap { $0.column("value")?.integer } == values)
+        }
+    }
+
+    /// The same range must survive `sqlite3_value` conversion, which is a separate code path from
+    /// column reads (it is the one custom functions see).
+    @Test
+    func largeIntegerThroughCustomFunction() async throws {
+        try await withOpenedConnection { conn in
+            let echo = SQLiteCustomFunction("echo_int", argumentCount: 1, pure: true) { args in
+                args[0].integer
+            }
+
+            _ = try await conn.install(customFunction: echo)
+            let rows = try await conn.query("SELECT echo_int(?) as value", [.integer(.max)])
+
+            #expect(rows.first?.column("value")?.integer == .max)
+        }
+    }
+
+    /// A `BLOB` must survive the bind/column round trip byte-for-byte, including the empty case.
+    ///
+    /// The blob read in ``SQLiteStatement`` is a single expression shared by the SwiftNIO and
+    /// NIO-free builds, so its behavior is worth pinning down directly.
+    @Test
+    func blobRoundTrip() async throws {
+        try await withOpenedConnection { conn in
+            let payloads: [[UInt8]] = [[], [0x00], [0xde, 0xad, 0xbe, 0xef], .init(0...255)]
+
+            _ = try await conn.query("CREATE TABLE blobs (value BLOB)")
+            for payload in payloads {
+                _ = try await conn.query("INSERT INTO blobs (value) VALUES (?)", [.blob(ByteBuffer(bytes: payload))])
+            }
+
+            let rows = try await conn.query("SELECT value FROM blobs ORDER BY rowid")
+
+            #expect(rows.compactMap { $0.column("value")?.blob.map { Array($0.readableBytesView) } } == payloads)
+        }
+    }
+
+    /// `Data` round-trips through `BLOB` in both directions.
+    ///
+    /// Its ``SQLiteDataConvertible`` conformance is spelled so that one implementation compiles against
+    /// both `ByteBuffer` and the `[UInt8]` stand-in used where SwiftNIO is absent.
+    @Test
+    func dataRoundTrip() async throws {
+        try await withOpenedConnection { conn in
+            let payload = Data([0x00, 0x01, 0xfe, 0xff])
+
+            _ = try await conn.query("CREATE TABLE datas (value BLOB)")
+            _ = try await conn.query("INSERT INTO datas (value) VALUES (?)", [payload.sqliteData!])
+
+            let rows = try await conn.query("SELECT value FROM datas")
+
+            #expect(rows.first?.column("value").flatMap(Data.init(sqliteData:)) == payload)
+            #expect(Data(sqliteData: .blob(ByteBuffer())) == Data())
+            #expect(Data(sqliteData: .null) == nil)
+        }
+    }
+
+    /// ``SQLiteData`` encodes blobs as raw bytes rather than using `ByteBuffer`'s Base64 `Codable`
+    /// conformance. The encoding goes through `readableBytesView`, one of the members the NIO-free
+    /// build supplies for `[UInt8]`.
+    @Test
+    func blobEncodesAsRawBytes() throws {
+        let encoded = try JSONEncoder().encode([SQLiteData.blob(ByteBuffer(bytes: [0x01, 0x02, 0x03]))])
+
+        #expect(String(decoding: encoded, as: UTF8.self) == "[[1,2,3]]")
     }
 
     @Test
@@ -204,6 +290,33 @@ struct SQLiteNIOTests {
 
             try await t1.value
             try await t2.value
+        }
+    }
+
+    @Test
+    func lastAutoincrementIDTracksInserts() async throws {
+        try await withOpenedConnection { conn in
+            _ = try await conn.query("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+            _ = try await conn.query("INSERT INTO t (v) VALUES ('a')")
+
+            #expect(try await conn.lastAutoincrementID() == 1)
+
+            _ = try await conn.query("INSERT INTO t (v) VALUES ('b')")
+
+            #expect(try await conn.lastAutoincrementID() == 2)
+        }
+    }
+
+    @Test
+    func futuresQuerySurfaceReturnsRows() async throws {
+        try await withOpenedConnection { conn in
+            _ = try await conn.query("CREATE TABLE t (v TEXT)").get()
+            _ = try await conn.query("INSERT INTO t (v) VALUES (?)", [.text("a")]).get()
+
+            let rows = try await conn.query("SELECT v FROM t").get()
+
+            #expect(rows.count == 1)
+            #expect(try await "a" == rows.first?.column("v")?.string)
         }
     }
 

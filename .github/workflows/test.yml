@@ -43,6 +43,7 @@ jobs:
       ios_scheme_name: sqlite-nio
       with_musl: true
       with_android: true
+      with_wasm: true
 
   submit-dependencies:
     permissions:

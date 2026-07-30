@@ -3,8 +3,10 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+#if canImport(NIOCore)
 import NIOConcurrencyHelpers
 import NIOCore
+#endif  // canImport(NIOCore)
 import VaporCSQLite
 
 // MARK: - Hook Types and Events
@@ -495,7 +497,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when update events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addUpdateObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteUpdateHookCallback) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.withBlockingIO {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .update, action: { $0.updateHooks[id] = callback })
@@ -526,7 +528,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addCommitObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteCommitObserver) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.withBlockingIO {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitObservers[id] = callback })
@@ -557,7 +559,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
     public func setCommitValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteCommitValidator) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.withBlockingIO {
             self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = callback })
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = nil })
@@ -585,7 +587,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when rollback events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addRollbackObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteRollbackHookCallback) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.withBlockingIO {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .rollback, action: { $0.rollbackHooks[id] = callback })
@@ -616,7 +618,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addAuthorizerObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteAuthorizerObserver) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.withBlockingIO {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerObservers[id] = callback })
@@ -650,7 +652,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
     public func setAuthorizerValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteAuthorizerValidator) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.withBlockingIO {
             self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerValidator = callback })
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.authorizerValidator = nil })
