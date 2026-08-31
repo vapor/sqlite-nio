@@ -4,7 +4,6 @@ import FoundationEssentials
 import Foundation
 #endif
 import Logging
-import NIOCore
 import NIOPosix
 #if canImport(FoundationEssentials)
 import NIOFoundationEssentialsCompat
