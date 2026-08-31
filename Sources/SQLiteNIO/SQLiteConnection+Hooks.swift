@@ -6,6 +6,7 @@ import Foundation
 import NIOConcurrencyHelpers
 import NIOCore
 import VaporCSQLite
+import NIOPosix
 
 // MARK: - Hook Types and Events
 
