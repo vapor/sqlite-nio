@@ -138,46 +138,38 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     public static func libraryVersionString() -> String {
         String(cString: sqlite_nio_sqlite3_libversion())
     }
-    
-    /// Open a new connection to an SQLite database.
-    ///
-    /// This is equivalent to invoking ``open(storage:threadPool:logger:on:)-64n3x`` using the
-    ///  `NIOThreadPool` and `MultiThreadedEventLoopGroup` singletons. This is the recommended configuration
-    ///  for all users.
-    ///
-    /// - Parameters:
-    ///   - storage: Specifies the location of the database for the connection. See ``Storage`` for details.
-    ///   - logger: The logger used by the connection. Defaults to a new `Logger`.
-    /// - Returns: A future whose value on success is a new connection object.
-    public static func open(
-        storage: Storage = .memory,
-        logger: Logger = .init(label: "codes.vapor.sqlite")
-    ) -> EventLoopFuture<SQLiteConnection> {
-        Self.open(
-            storage: storage,
-            threadPool: NIOThreadPool.singleton,
-            logger: logger,
-            on: MultiThreadedEventLoopGroup.singleton.any()
-        )
-    }
-    
+
     /// Open a new connection to an SQLite database.
     ///
     /// - Parameters:
     ///   - storage: Specifies the location of the database for the connection. See ``Storage`` for details.
     ///   - threadPool: An `NIOThreadPool` used to execute all libsqlite3 API calls for this connection.
-    ///   - logger: The logger used by the connection. Defaults to a new `Logger`.
-    ///   - eventLoop: An `EventLoop` to associate with the connection for creating futures.
-    /// - Returns: A future whose value on success is a new connection object.
+    /// - Returns: A new connection object.
     public static func open(
         storage: Storage = .memory,
         threadPool: NIOThreadPool,
-        logger: Logger = .init(label: "codes.vapor.sqlite"),
-        on eventLoop: any EventLoop
-    ) -> EventLoopFuture<SQLiteConnection> {
-        threadPool.runIfActive(eventLoop: eventLoop) {
-            try self.openInternal(storage: storage, threadPool: threadPool, logger: logger, eventLoop: eventLoop)
+    ) async throws -> SQLiteConnection {
+        try await threadPool.runIfActive {
+            try self.openInternal(storage: storage, threadPool: threadPool)
         }
+    }
+
+    /// Open a new connection to an SQLite database.
+    ///
+    /// This is equivalent to invoking ``open(storage:threadPool:logger:on:)-3m3lb`` using the
+    ///  `NIOThreadPool` and `MultiThreadedEventLoopGroup` singletons. This is the recommended configuration
+    ///  for all users.
+    ///
+    /// - Parameters:
+    ///   - storage: Specifies the location of the database for the connection. See ``Storage`` for details.
+    /// - Returns: A future whose value on success is a new connection object.
+    public static func open(
+        storage: Storage = .memory,
+    ) async throws -> SQLiteConnection {
+        try await Self.open(
+            storage: storage,
+            threadPool: NIOThreadPool.singleton,
+        )
     }
     
     /// The underlying implementation of ``open(storage:threadPool:logger:on:)-64n3x`` and
@@ -185,8 +177,6 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     private static func openInternal(
         storage: Storage,
         threadPool: NIOThreadPool,
-        logger: Logger,
-        eventLoop: any EventLoop
     ) throws -> SQLiteConnection {
         let path: String
         switch storage {
@@ -221,15 +211,9 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
             throw SQLiteError(reason: .init(statusCode: busyRet), message: "Failed to set busy handler for SQLite database at \(path)")
         }
 
-        logger.debug("Connected to sqlite database", metadata: ["path": .string(path)])
-        return SQLiteConnection(handle: handle, threadPool: threadPool, logger: logger, on: eventLoop)
+        Logger.current.debug("Connected to sqlite database", metadata: ["path": .string(path)])
+        return SQLiteConnection(handle: handle, threadPool: threadPool)
     }
-
-    // See `SQLiteDatabase.eventLoop`.
-    public let eventLoop: any EventLoop
-    
-    // See `SQLiteDatabase.logger`.
-    public let logger: Logger
     
     /// The underlying `sqlite3` connection handle.
     let handle: SQLiteConnectionHandle
@@ -244,13 +228,9 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     private init(
         handle: OpaquePointer?,
         threadPool: NIOThreadPool,
-        logger: Logger,
-        on eventLoop: any EventLoop
     ) {
         self.handle = .init(handle)
         self.threadPool = threadPool
-        self.logger = logger
-        self.eventLoop = eventLoop
     }
     
     /// Returns the most recent error message from the connection as a string.
@@ -270,140 +250,6 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// 
     /// Only valid until the next operation is performed on the connection; watch out for races.
     ///
-    /// - Returns: A future containing the most recently inserted rowid value.
-    public func lastAutoincrementID() -> EventLoopFuture<Int> {
-        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            numericCast(sqlite_nio_sqlite3_last_insert_rowid(self.handle.raw))
-        }
-    }
-
-    // See `SQLiteDatabase.withConnection(_:)`.
-    @preconcurrency
-    public func withConnection<T>(
-        _ closure: @escaping @Sendable (SQLiteConnection) -> EventLoopFuture<T>
-    ) -> EventLoopFuture<T> {
-        closure(self)
-    }
-    
-    // See `SQLiteDatabase.query(_:_:logger:_:)`.
-    @preconcurrency
-    public func query(
-        _ query: String,
-        _ binds: [SQLiteData],
-        logger: Logger,
-        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
-    ) -> EventLoopFuture<Void> {
-        let promise = self.eventLoop.makePromise(of: Void.self)
-        self.threadPool.submit {
-            guard case $0 = NIOThreadPool.WorkItemState.active else {
-                // Note: We should be throwing NIOThreadPoolError.ThreadPoolInactive here, but we can't
-                // 'cause its initializer isn't public so we let `SQLITE_MISUSE` get the point across.
-                return promise.fail(SQLiteError(reason: .misuse, message: "Thread pool is inactive"))
-            }
-            var futures: [EventLoopFuture<Void>] = []
-            do {
-                var statement = try SQLiteStatement(query: query, on: self)
-                let columns = try statement.columns()
-                try statement.bind(binds)
-                while let row = try statement.nextRow(for: columns) {
-                    futures.append(promise.futureResult.eventLoop.submit { onRow(row) })
-                }
-            } catch {
-                return promise.fail(error) // EventLoopPromise.fail(_:), conveniently, returns Void
-            }
-            EventLoopFuture.andAllSucceed(futures, promise: promise)
-        }
-        return promise.futureResult
-    }
-
-    /// Close the connection and invalidate its handle.
-    /// 
-    /// No further operations may be performed on the connection after calling this method.
-    ///
-    /// - Returns: A future indicating completion of connection closure.
-    public func close() -> EventLoopFuture<Void> {
-        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            self.clearAllHooks()
-            sqlite_nio_sqlite3_close(self.handle.raw)
-            self.handle.raw = nil
-        }
-    }
-    
-    /// Install the provided ``SQLiteCustomFunction`` on the connection.
-    ///
-    /// - Parameter customFunction: The function to install.
-    /// - Returns: A future indicating completion of the install operation.
-    public func install(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            self.logger.trace("Adding custom function \(customFunction.name)")
-            try customFunction.install(in: self)
-        }
-    }
-
-    /// Uninstall the provided ``SQLiteCustomFunction`` from the connection.
-    ///
-    /// - Parameter customFunction: The function to remove.
-    /// - Returns: A future indicating completion of the uninstall operation.
-    public func uninstall(customFunction: SQLiteCustomFunction) -> EventLoopFuture<Void> {
-        self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            self.logger.trace("Removing custom function \(customFunction.name)")
-            try customFunction.uninstall(in: self)
-        }
-    }
-
-    /// Deinitializer for ``SQLiteConnection``.
-    deinit {
-        assert(self.handle.raw == nil, "SQLiteConnection was not closed before deinitializing")
-    }
-}
-
-extension SQLiteConnection {
-    /// Open a new connection to an SQLite database.
-    ///
-    /// This is equivalent to invoking ``open(storage:threadPool:logger:on:)-3m3lb`` using the
-    ///  `NIOThreadPool` and `MultiThreadedEventLoopGroup` singletons. This is the recommended configuration
-    ///  for all users.
-    ///
-    /// - Parameters:
-    ///   - storage: Specifies the location of the database for the connection. See ``Storage`` for details.
-    ///   - logger: The logger used by the connection. Defaults to a new `Logger`.
-    /// - Returns: A future whose value on success is a new connection object.
-    public static func open(
-        storage: Storage = .memory,
-        logger: Logger = .init(label: "codes.vapor.sqlite")
-    ) async throws -> SQLiteConnection {
-        try await Self.open(
-            storage: storage,
-            threadPool: NIOThreadPool.singleton,
-            logger: logger,
-            on: MultiThreadedEventLoopGroup.singleton.any()
-        )
-    }
-    
-    /// Open a new connection to an SQLite database.
-    ///
-    /// - Parameters:
-    ///   - storage: Specifies the location of the database for the connection. See ``Storage`` for details.
-    ///   - threadPool: An `NIOThreadPool` used to execute all libsqlite3 API calls for this connection.
-    ///   - logger: The logger used by the connection. Defaults to a new `Logger`.
-    ///   - eventLoop: An `EventLoop` to associate with the connection for creating futures.
-    /// - Returns: A new connection object.
-    public static func open(
-        storage: Storage = .memory,
-        threadPool: NIOThreadPool,
-        logger: Logger = .init(label: "codes.vapor.sqlite"),
-        on eventLoop: any EventLoop
-    ) async throws -> SQLiteConnection {
-        try await threadPool.runIfActive {
-            try self.openInternal(storage: storage, threadPool: threadPool, logger: logger, eventLoop: eventLoop)
-        }
-    }
-    
-    /// Returns the last value generated by auto-increment functionality (either the version implied by
-    /// `INTEGER PRIMARY KEY` or that of the explicit `AUTO_INCREMENT` modifier) on this database.
-    /// 
-    /// Only valid until the next operation is performed on the connection; watch out for races.
-    ///
     /// - Returns: The most recently inserted rowid value.
     public func lastAutoincrementID() async throws -> Int {
         try await self.threadPool.runIfActive {
@@ -411,14 +257,14 @@ extension SQLiteConnection {
         }
     }
 
-    /// Concurrency-aware variant of ``withConnection(_:)-8cmxp``.
+    // See `SQLiteDatabase.withConnection(_:)`.
     public func withConnection<T>(
         _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
     ) async throws -> T {
         try await closure(self)
     }
     
-    /// Concurrency-aware variant of ``query(_:_:_:)-etrj``.
+    // See `SQLiteDatabase.query(_:_:_:)`.
     public func query(
         _ query: String,
         _ binds: [SQLiteData],
@@ -444,13 +290,13 @@ extension SQLiteConnection {
             self.handle.raw = nil
         }
     }
-
+    
     /// Install the provided ``SQLiteCustomFunction`` on the connection.
     ///
     /// - Parameter customFunction: The function to install.
     public func install(customFunction: SQLiteCustomFunction) async throws {
         try await self.threadPool.runIfActive {
-            self.logger.trace("Adding custom function \(customFunction.name)")
+            Logger.current.trace("Adding custom function \(customFunction.name)")
             try customFunction.install(in: self)
         }
     }
@@ -460,8 +306,13 @@ extension SQLiteConnection {
     /// - Parameter customFunction: The function to remove.
     public func uninstall(customFunction: SQLiteCustomFunction) async throws {
         try await self.threadPool.runIfActive {
-            self.logger.trace("Removing custom function \(customFunction.name)")
+            Logger.current.trace("Removing custom function \(customFunction.name)")
             try customFunction.uninstall(in: self)
         }
+    }
+
+    /// Deinitializer for ``SQLiteConnection``.
+    deinit {
+        assert(self.handle.raw == nil, "SQLiteConnection was not closed before deinitializing")
     }
 }
