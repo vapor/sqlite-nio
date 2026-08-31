@@ -51,7 +51,7 @@ struct SQLiteNIOTests {
         try await threadPool.shutdownGracefully()
 
         // This should error, but not create a leaking promise fatal error
-        await #expect(throws: (any Error).self) { try await SQLiteConnection.open(storage: .memory, threadPool: threadPool, on: MultiThreadedEventLoopGroup.singleton.any()) }
+        await #expect(throws: (any Error).self) { try await SQLiteConnection.open(storage: .memory, threadPool: threadPool) }
     }
 
     @Test
@@ -176,13 +176,6 @@ struct SQLiteNIOTests {
             let rows = try await conn.query("SELECT my_custom_function(2) as my_value")
             #expect(rows.first?.column("my_value")?.integer == 6)
         }
-    }
-
-    @Test
-    func singletonEventLoopOpen() async throws {
-        var conn: SQLiteConnection? = nil
-        await #expect(throws: Never.self) { conn = try await SQLiteConnection.open(storage: .memory).get() }
-        try await conn?.close().get()
     }
 
     @Test
