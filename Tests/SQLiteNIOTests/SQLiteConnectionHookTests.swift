@@ -1,6 +1,6 @@
 import SQLiteNIO
 import Testing
-import NIOConcurrencyHelpers
+import Synchronization
 
 @Suite("SQLite Connection Hook Tests")
 struct SQLiteConnectionHookTests {
@@ -456,20 +456,19 @@ private extension SQLiteConnection {
 /// We deliberately avoid `actor` here so hook callbacks (which are synchronous
 /// and run on SQLite’s internal thread) can record events deterministically
 /// without spawning Tasks and introducing scheduling races.
-private final class Box<Element>: @unchecked Sendable {
-    private let lock = NIOLock()
-    private var items: [Element] = []
+private final class Box<Element: Sendable>: Sendable {
+    private let items = Mutex<[Element]>([])
 
     func append(_ item: Element) {
-        lock.withLockVoid { items.append(item) }
+        self.items.withLock { $0.append(item) }
     }
 
     func count() -> Int {
-        lock.withLock { items.count }
+        self.items.withLock { $0.count }
     }
 
     func all() -> [Element] {
-        lock.withLock { items }
+        self.items.withLock { $0 }
     }
 }
 
