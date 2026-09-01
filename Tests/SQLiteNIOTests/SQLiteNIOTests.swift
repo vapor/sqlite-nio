@@ -4,7 +4,7 @@ import FoundationEssentials
 import Foundation
 #endif
 import Logging
-import NIOPosix
+import Synchronization
 #if canImport(FoundationEssentials)
 import NIOFoundationEssentialsCompat
 #else
@@ -13,8 +13,8 @@ import NIOFoundationCompat
 import SQLiteNIO
 import Testing
 
-/// Run the provided closure with an opened ``SQLiteConnection`` using an in-memory database and the singleton thread
-/// pool and event loop, guaranteeing that the connection is correctly cleaned up afterwards regardless of errors.
+/// Run the provided closure with an opened ``SQLiteConnection`` using an in-memory database and the shared thread
+/// pool, guaranteeing that the connection is correctly cleaned up afterwards regardless of errors.
 func withOpenedConnection<T>(
     _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
 ) async throws -> T {
@@ -32,6 +32,16 @@ func withOpenedConnection<T>(
 
 }
 
+/// A `TaskExecutor` that runs jobs inline on the enqueueing thread, counting each enqueue.
+final class CountingInlineExecutor: TaskExecutor {
+    let enqueueCount = Mutex(0)
+
+    func enqueue(_ job: consuming ExecutorJob) {
+        self.enqueueCount.withLock { $0 += 1 }
+        job.runSynchronously(on: self.asUnownedTaskExecutor())
+    }
+}
+
 @Suite("Base SQLiteNIO tests")
 struct SQLiteNIOTests {
     @Test
@@ -45,12 +55,20 @@ struct SQLiteNIOTests {
     }
 
     @Test
-    func connectionClosedThreadPool() async throws {
-        let threadPool = NIOThreadPool(numberOfThreads: 1)
-        try await threadPool.shutdownGracefully()
+    func customExecutorReceivesConnectionWork() async throws {
+        let executor = CountingInlineExecutor()
+        let connection = try await SQLiteConnection.open(storage: .memory, executor: executor)
 
-        // This should error, but not create a leaking promise fatal error
-        await #expect(throws: (any Error).self) { try await SQLiteConnection.open(storage: .memory, threadPool: threadPool) }
+        do {
+            _ = try await connection.query("SELECT 1")
+            try await connection.close()
+        } catch {
+            try? await connection.close()
+            throw error
+        }
+
+        // Opening, querying, and closing must each have hopped to the provided executor.
+        #expect(executor.enqueueCount.withLock { $0 } >= 3)
     }
 
     @Test
