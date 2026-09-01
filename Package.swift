@@ -4,10 +4,11 @@ import PackageDescription
 let package = Package(
     name: "sqlite-nio",
     platforms: [
-        .macOS(.v10_15),
-        .iOS(.v13),
-        .watchOS(.v6),
-        .tvOS(.v13),
+        .macOS(.v15),
+        .iOS(.v18),
+        .watchOS(.v11),
+        .tvOS(.v18),
+        .visionOS(.v2),
     ],
     products: [
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
@@ -38,7 +39,6 @@ let package = Package(
                 .target(name: "VaporCSQLite"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio",
                          condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
                 .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),

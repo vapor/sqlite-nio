@@ -13,7 +13,6 @@ public protocol SQLiteDatabase: Sendable {
     ///   - query: The query string to execute.
     ///   - binds: An ordered list of ``SQLiteData`` items to use as bound parameters for the query.
     ///   - onRow: A closure to invoke for each result row returned by the query, if any.
-    /// - Returns: A future completed when the query has executed and returned all results (if any).
     func query(
         _ query: String,
         _ binds: [SQLiteData],
@@ -27,9 +26,9 @@ public protocol SQLiteDatabase: Sendable {
     /// implementation is provided for protocol implementors who predate the existence of this requirement.
     ///
     /// - Parameter closure: The closure to invoke. Unless the closure changes the connection's state itself or the
-    ///   connection is closed by SQLite due to error, it is guaranteed to remain valid until the future returned by
-    ///   the closure is completed or failed.
-    /// - Returns: A future signaling completion of the closure and containing the closure's result, if any.
+    ///   connection is closed by SQLite due to error, it is guaranteed to remain valid until the closure returns
+    ///   or throws.
+    /// - Returns: The closure's result, if any.
     func withConnection<T>(
         _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
     ) async throws -> T
