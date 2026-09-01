@@ -3,10 +3,8 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
-import NIOConcurrencyHelpers
-import NIOCore
+import Synchronization
 import VaporCSQLite
-import NIOPosix
 
 // MARK: - Hook Types and Events
 
@@ -310,7 +308,7 @@ extension SQLiteConnection {
     ///
     /// - Parameter event: A ``SQLiteUpdateEvent`` containing details about the database modification.
     ///
-    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor as needed.
     public typealias SQLiteUpdateHookCallback = @Sendable (SQLiteUpdateEvent) -> Void
 
     /// The type signature for commit observer callbacks (pure observation, cannot veto).
@@ -320,7 +318,7 @@ extension SQLiteConnection {
     ///
     /// - Parameter event: A ``SQLiteCommitEvent`` containing details about the commit attempt.
     ///
-    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor as needed.
     public typealias SQLiteCommitObserver = @Sendable (SQLiteCommitEvent) -> Void
 
     /// The type signature for commit validator callbacks (can veto commits).
@@ -331,14 +329,14 @@ extension SQLiteConnection {
     /// - Parameter event: A ``SQLiteCommitEvent`` containing details about the commit attempt.
     /// - Returns: A ``SQLiteCommitResponse`` indicating whether to allow or deny the commit.
     ///
-    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor as needed.
     public typealias SQLiteCommitValidator = @Sendable (SQLiteCommitEvent) -> SQLiteCommitResponse
 
     /// The type signature for rollback hook callbacks.
     ///
     /// - Parameter event: A ``SQLiteRollbackEvent`` containing details about the rollback.
     ///
-    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor as needed.
     public typealias SQLiteRollbackHookCallback = @Sendable (SQLiteRollbackEvent) -> Void
 
     /// The type signature for authorizer observer callbacks.
@@ -349,7 +347,7 @@ extension SQLiteConnection {
     ///
     /// - Parameter event: A ``SQLiteAuthorizerEvent`` containing details about the access attempt.
     ///
-    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor as needed.
     public typealias SQLiteAuthorizerObserver = @Sendable (SQLiteAuthorizerEvent) -> Void
 
     /// The type signature for authorizer validator callbacks.
@@ -360,7 +358,7 @@ extension SQLiteConnection {
     /// - Parameter event: A ``SQLiteAuthorizerEvent`` containing details about the access attempt.
     /// - Returns: A ``SQLiteAuthorizerResponse`` indicating whether to allow, deny, or ignore the operation.
     ///
-    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor or event loop as needed.
+    /// > Note: Callbacks run on SQLite's internal thread. Hop to an actor as needed.
     public typealias SQLiteAuthorizerValidator = @Sendable (SQLiteAuthorizerEvent) -> SQLiteAuthorizerResponse
 }
 
@@ -488,7 +486,7 @@ extension SQLiteConnection {
     /// ```
     ///
     /// > Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
+    ///   internal thread; hop to your own actor as needed.
     ///
     /// - Parameter lifetime: The observer lifetime behavior. See ``SQLiteObserverLifetime`` for details.
     ///    Use ``SQLiteObserverLifetime/scoped`` for automatic cleanup on token deallocation, or
@@ -496,7 +494,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when update events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addUpdateObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteUpdateHookCallback) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.onExecutor {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .update, action: { $0.updateHooks[id] = callback })
@@ -519,7 +517,7 @@ extension SQLiteConnection {
     /// ```
     ///
     /// > Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
+    ///   internal thread; hop to your own actor as needed.
     ///
     /// - Parameter lifetime: The observer lifetime behavior. See ``SQLiteObserverLifetime`` for details.
     ///    Use ``SQLiteObserverLifetime/scoped`` for automatic cleanup on token deallocation, or
@@ -527,7 +525,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addCommitObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteCommitObserver) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.onExecutor {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitObservers[id] = callback })
@@ -550,7 +548,7 @@ extension SQLiteConnection {
     /// ```
     ///
     /// > Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
+    ///   internal thread; hop to your own actor as needed.
     ///
     /// - Parameter lifetime: The observer lifetime behavior. See ``SQLiteObserverLifetime`` for details.
     ///    Use ``SQLiteObserverLifetime/scoped`` for automatic cleanup on token deallocation, or
@@ -558,7 +556,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when commit events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
     public func setCommitValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteCommitValidator) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.onExecutor {
             self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = callback })
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = nil })
@@ -578,7 +576,7 @@ extension SQLiteConnection {
     /// ```
     ///
     /// > Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
+    ///   internal thread; hop to your own actor as needed.
     ///
     /// - Parameter lifetime: The observer lifetime behavior. See ``SQLiteObserverLifetime`` for details.
     ///    Use ``SQLiteObserverLifetime/scoped`` for automatic cleanup on token deallocation, or
@@ -586,7 +584,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when rollback events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addRollbackObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteRollbackHookCallback) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.onExecutor {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .rollback, action: { $0.rollbackHooks[id] = callback })
@@ -609,7 +607,7 @@ extension SQLiteConnection {
     /// ```
     ///
     /// > Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
+    ///   internal thread; hop to your own actor as needed.
     ///
     /// - Parameter lifetime: The observer lifetime behavior. See ``SQLiteObserverLifetime`` for details.
     ///    Use ``SQLiteObserverLifetime/scoped`` for automatic cleanup on token deallocation, or
@@ -617,7 +615,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the observer when canceled.
     public func addAuthorizerObserver(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteAuthorizerObserver) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.onExecutor {
             let id = UUID()
 
             self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerObservers[id] = callback })
@@ -643,7 +641,7 @@ extension SQLiteConnection {
     /// ```
     ///
     /// > Important: Registration is safe from any thread. Callbacks are invoked on SQLite's
-    ///   internal thread; hop to your own actor or event loop as needed.
+    ///   internal thread; hop to your own actor as needed.
     ///
     /// - Parameter lifetime: The observer lifetime behavior. See ``SQLiteObserverLifetime`` for details.
     ///    Use ``SQLiteObserverLifetime/scoped`` for automatic cleanup on token deallocation, or
@@ -651,7 +649,7 @@ extension SQLiteConnection {
     /// - Parameter callback: Closure to invoke when authorization events occur.
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
     public func setAuthorizerValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteAuthorizerValidator) async throws -> SQLiteHookToken {
-        try await self.threadPool.runIfActive {
+        try await self.onExecutor {
             self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerValidator = callback })
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
                 _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.authorizerValidator = nil })
@@ -680,8 +678,8 @@ extension SQLiteConnection {
 
     // Convenience to mutate buckets
     @discardableResult
-    fileprivate func withBuckets<T>(_ body: (inout ObserverBuckets) -> T) -> T {
-        self.observerBuckets.withLockedValue(body)
+    fileprivate func withBuckets<T>(_ body: (inout ObserverBuckets) -> sending T) -> sending T {
+        self.observerBuckets.withLock(body)
     }
 }
 
@@ -742,7 +740,7 @@ extension SQLiteConnection {
 // MARK: - Low-Level C Hook Implementation
 
 extension SQLiteConnection {
-    /// Must be run on the connection's thread pool.
+    /// Must be run on the connection's executor.
     fileprivate func applyUpdateHook(enabled: Bool) {
         guard enabled else {
             _ = sqlite_nio_sqlite3_update_hook(self.handle.raw, nil, nil)
@@ -767,7 +765,7 @@ extension SQLiteConnection {
         }, context)
     }
 
-    /// Must be run on the connection's thread pool.
+    /// Must be run on the connection's executor.
     fileprivate func applyCommitHook(enabled: Bool) {
         guard enabled else {
             _ = sqlite_nio_sqlite3_commit_hook(self.handle.raw, nil, nil)
@@ -800,7 +798,7 @@ extension SQLiteConnection {
         }, context)
     }
 
-    /// Must be run on the connection's thread pool.
+    /// Must be run on the connection's executor.
     fileprivate func applyRollbackHook(enabled: Bool) {
         guard enabled else {
             _ = sqlite_nio_sqlite3_rollback_hook(self.handle.raw, nil, nil)
@@ -823,7 +821,7 @@ extension SQLiteConnection {
         }, context)
     }
 
-    /// Must be run on the connection's thread pool.
+    /// Must be run on the connection's executor.
     fileprivate func applyAuthorizerHook(enabled: Bool) {
         guard enabled else {
             _ = sqlite_nio_sqlite3_set_authorizer(self.handle.raw, nil, nil)
@@ -861,12 +859,12 @@ extension SQLiteConnection {
         }, context)
     }
 
-    /// Must be run on the connection's thread pool.
+    /// Must be run on the connection's executor.
     internal func clearAllHooks() {
         self.applyUpdateHook(enabled: false)
         self.applyCommitHook(enabled: false)
         self.applyRollbackHook(enabled: false)
         self.applyAuthorizerHook(enabled: false)
-        self.observerBuckets.withLockedValue { $0 = .init() }
+        self.observerBuckets.withLock { $0 = .init() }
     }
 }

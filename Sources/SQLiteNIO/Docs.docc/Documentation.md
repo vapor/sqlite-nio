@@ -4,7 +4,7 @@
     @TitleHeading(Package)
 }
 
-🪶 Non-blocking, event-driven Swift client for [SQLite](https://sqlite.org) built on [SwiftNIO](https://github.com/apple/swift-nio).
+🪶 Non-blocking Swift client for [SQLite](https://sqlite.org) built on Swift Concurrency.
 
 ## Using SQLiteNIO
 
@@ -18,9 +18,9 @@ dependencies: [
 
 ### Supported Platforms
 
-SQLiteNIO supports all platforms on which NIO itself works. At the time of this writing, these include:
+SQLiteNIO supports all platforms with a Swift 6.1+ toolchain. At the time of this writing, these include:
 
-- Ubuntu 20.04+
-- macOS 10.15+
-- iOS 13+
-- tvOS 13+ and watchOS 7+ (experimental)
+- Ubuntu 22.04+
+- macOS 15+
+- iOS 18+
+- tvOS 18+, watchOS 11+, and visionOS 2+
