@@ -1,6 +1,8 @@
 import SQLiteNIO
 import Testing
+#if canImport(NIOCore)
 import NIOConcurrencyHelpers
+#endif
 
 @Suite("SQLite Connection Hook Tests")
 struct SQLiteConnectionHookTests {

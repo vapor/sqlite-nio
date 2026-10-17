@@ -1,4 +1,6 @@
+#if canImport(NIOCore)
 import NIOCore
+#endif
 import VaporCSQLite
 
 struct SQLiteStatement {
@@ -102,12 +104,13 @@ struct SQLiteStatement {
             return .text(.init(cString: val))
         case SQLITE_BLOB:
             let length = Int(sqlite_nio_sqlite3_column_bytes(self.handle, offset))
-            var buffer = ByteBufferAllocator().buffer(capacity: length)
-            
-            if let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) {
-                buffer.writeBytes(UnsafeRawBufferPointer(start: blobPointer, count: length))
+
+            guard let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) else {
+                return .blob(ByteBuffer())
             }
-            return .blob(buffer)
+            // N.B.: This is `ByteBuffer(bytes:)` rather than an allocate-then-write pair so that the
+            // same expression compiles against the `[UInt8]` stand-in used where SwiftNIO is absent.
+            return .blob(ByteBuffer(bytes: UnsafeRawBufferPointer(start: blobPointer, count: length)))
         case SQLITE_NULL:
             return .null
         default:

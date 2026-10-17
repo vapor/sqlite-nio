@@ -12,12 +12,18 @@ import WASILibc
 import CRT
 #endif
 
+#if canImport(NIOCore)
 import NIOCore
+#endif
 #if canImport(FoundationEssentials)
+#if canImport(NIOCore)
 import NIOFoundationEssentialsCompat
+#endif
 import FoundationEssentials
 #else
+#if canImport(NIOCore)
 import NIOFoundationCompat
+#endif
 import Foundation
 #endif
 
@@ -111,7 +117,9 @@ extension Data: SQLiteDataConvertible {
         guard case .blob(let value) = sqliteData else {
             return nil
         }
-        self = .init(buffer: value, byteTransferStrategy: .copy)
+        // N.B.: Spelled this way, rather than as `Data(buffer:byteTransferStrategy:)`, so that the
+        // same expression compiles against the `[UInt8]` stand-in used where SwiftNIO is absent.
+        self = .init(value.readableBytesView)
     }
 
     public var sqliteData: SQLiteData? {
@@ -164,10 +172,11 @@ extension Date: SQLiteDataConvertible {
                 // this code actually does work. It's ugly, but it works. And deeply sadly, it too is
                 // much, much faster than ISO8601DateFormatter... More importantly, it allows us to actually
                 // stick to importing FoundationEssentials.
-                var stm = tm(
-                    tm_sec: 0, tm_min: 0, tm_hour: 0, tm_mday: 0, tm_mon: 0, tm_year: 0,
-                    tm_wday: -1, tm_yday: -1, tm_isdst: 0, tm_gmtoff: 0, tm_zone: nil
-                )
+                // N.B.: Spelled with the zeroing initializer, rather than memberwise, because libcs
+                // disagree on what `tm`'s fields are (wasi-libc adds a `__tm_nsec` member, for
+                // example), and the zeroing initializer compiles against all of them. `timegm()`
+                // ignores `tm_wday` and `tm_yday`, so all-zero is a valid starting point.
+                var stm = tm()
                 guard v.count == 10 || v.count == 19, v.prefix(5).last == "-", v.prefix(8).last == "-",
                       let y = Int32(v.prefix(4)), let n = Int32(v.prefix(7).suffix(2)), let d = Int32(v.prefix(10).suffix(2))
                 else { return nil }

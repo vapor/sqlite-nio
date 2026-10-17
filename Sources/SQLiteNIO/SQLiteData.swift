@@ -1,5 +1,7 @@
 import VaporCSQLite
+#if canImport(NIOCore)
 import NIOCore
+#endif
 
 /// On 32-bit platforms, use an explicitly 64-bit integer type. On other platforms, use the platform-native
 /// integer width, as we don't expect to ever support platforms with less than 32 bits. Most users will not
