@@ -497,9 +497,9 @@ extension SQLiteConnection {
         try await self.onExecutor {
             let id = UUID()
 
-            self.addHookAndInstallDispatcherIfNeeded(kind: .update, action: { $0.updateHooks[id] = callback })
+            self.addHook(kind: .update) { $0.updateHooks[id] = callback }
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
-                _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .update, action: { $0.updateHooks[id] = nil })
+                self?.removeHook { $0.updateHooks[id] = nil }
             }
         }
     }
@@ -528,9 +528,9 @@ extension SQLiteConnection {
         try await self.onExecutor {
             let id = UUID()
 
-            self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitObservers[id] = callback })
+            self.addHook(kind: .commit) { $0.commitObservers[id] = callback }
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
-                _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.commitObservers[id] = nil })
+                self?.removeHook { $0.commitObservers[id] = nil }
             }
         }
     }
@@ -557,9 +557,12 @@ extension SQLiteConnection {
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
     public func setCommitValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteCommitValidator) async throws -> SQLiteHookToken {
         try await self.onExecutor {
-            self.addHookAndInstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = callback })
+            let id = UUID()
+
+            self.addHook(kind: .commit) { $0.commitValidator = (id, callback) }
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
-                _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.commitValidator = nil })
+                // Only remove the validator this token registered, not one that has since replaced it.
+                self?.removeHook { if $0.commitValidator?.id == id { $0.commitValidator = nil } }
             }
         }
     }
@@ -587,9 +590,9 @@ extension SQLiteConnection {
         try await self.onExecutor {
             let id = UUID()
 
-            self.addHookAndInstallDispatcherIfNeeded(kind: .rollback, action: { $0.rollbackHooks[id] = callback })
+            self.addHook(kind: .rollback) { $0.rollbackHooks[id] = callback }
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
-                _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .rollback, action: { $0.rollbackHooks[id] = nil })
+                self?.removeHook { $0.rollbackHooks[id] = nil }
             }
         }
     }
@@ -618,9 +621,9 @@ extension SQLiteConnection {
         try await self.onExecutor {
             let id = UUID()
 
-            self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerObservers[id] = callback })
+            self.addHook(kind: .authorizer) { $0.authorizerObservers[id] = callback }
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
-                _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerObservers[id] = nil })
+                self?.removeHook { $0.authorizerObservers[id] = nil }
             }
         }
     }
@@ -650,9 +653,12 @@ extension SQLiteConnection {
     /// - Returns: A ``SQLiteHookToken`` that removes the validator when canceled.
     public func setAuthorizerValidator(lifetime: SQLiteObserverLifetime, _ callback: @escaping SQLiteAuthorizerValidator) async throws -> SQLiteHookToken {
         try await self.onExecutor {
-            self.addHookAndInstallDispatcherIfNeeded(kind: .authorizer, action: { $0.authorizerValidator = callback })
+            let id = UUID()
+
+            self.addHook(kind: .authorizer) { $0.authorizerValidator = (id, callback) }
             return .init(lifetime: lifetime) { @Sendable [weak self = self] in
-                _ = self?.removeHookAndUninstallDispatcherIfNeeded(kind: .commit, action: { $0.authorizerValidator = nil })
+                // Only remove the validator this token registered, not one that has since replaced it.
+                self?.removeHook { if $0.authorizerValidator?.id == id { $0.authorizerValidator = nil } }
             }
         }
     }
@@ -664,12 +670,13 @@ extension SQLiteConnection {
     struct ObserverBuckets: Sendable {
         var updateHooks: [UUID: SQLiteUpdateHookCallback] = [:]
         var commitObservers: [UUID: SQLiteCommitObserver] = [:]
-        var commitValidator: SQLiteCommitValidator? = nil
+        var commitValidator: (id: UUID, validate: SQLiteCommitValidator)? = nil
         var rollbackHooks: [UUID: SQLiteRollbackHookCallback] = [:]
         var authorizerObservers: [UUID: SQLiteAuthorizerObserver] = [:]
-        var authorizerValidator: SQLiteAuthorizerValidator? = nil
+        var authorizerValidator: (id: UUID, validate: SQLiteAuthorizerValidator)? = nil
 
-        // Track whether low-level dispatchers are installed
+        // Track whether low-level dispatchers are installed. Once installed, a dispatcher stays installed until
+        // the connection is closed, even if every observer has since been removed.
         var updateDispatcherInstalled = false
         var commitDispatcherInstalled = false
         var rollbackDispatcherInstalled = false
@@ -685,55 +692,55 @@ extension SQLiteConnection {
 
 // MARK: - Dispatcher Management
 
+// Lock ordering: SQLite invokes the dispatchers from inside a call on the connection, with the connection's
+// own mutex held, and each dispatcher then takes the observer lock. Installing or removing a C hook takes
+// that same connection mutex, so it must never happen while the observer lock is held.
+
 extension SQLiteConnection {
-    fileprivate func addHookAndInstallDispatcherIfNeeded(kind: SQLiteHookKind, action: @Sendable (inout ObserverBuckets) -> Void) {
-        self.withBuckets { buckets in
-            action(&buckets)
-            switch kind {
-                // Install update hook dispatcher if needed
-            case .update where !buckets.updateDispatcherInstalled && !buckets.updateHooks.isEmpty:
-                buckets.updateDispatcherInstalled = true
-                self.applyUpdateHook(enabled: true)
-                // Install commit hook dispatcher if needed (observers or validator)
-            case .commit where !buckets.commitDispatcherInstalled && (!buckets.commitObservers.isEmpty || buckets.commitValidator != nil):
-                buckets.commitDispatcherInstalled = true
-                self.applyCommitHook(enabled: true)
-                // Install rollback hook dispatcher if needed
-            case .rollback where !buckets.rollbackDispatcherInstalled && !buckets.rollbackHooks.isEmpty:
-                buckets.rollbackDispatcherInstalled = true
-                self.applyRollbackHook(enabled: true)
-                // Install authorizer hook dispatcher if needed (observers or validator)
-            case .authorizer where !buckets.authorizerDispatcherInstalled && (!buckets.authorizerObservers.isEmpty || buckets.authorizerValidator != nil):
-                buckets.authorizerDispatcherInstalled = true
-                self.applyAuthorizerHook(enabled: true)
-            default:
-                break
+    /// Register an observer and make sure the C hook that dispatches to it is installed.
+    ///
+    /// Must be run on the connection's executor.
+    fileprivate func addHook(kind: SQLiteHookKind, _ register: (inout ObserverBuckets) -> Void) {
+        let isInstalled = self.withBuckets { buckets in
+            register(&buckets)
+
+            return switch kind {
+            case .update:     buckets.updateDispatcherInstalled
+            case .commit:     buckets.commitDispatcherInstalled
+            case .rollback:   buckets.rollbackDispatcherInstalled
+            case .authorizer: buckets.authorizerDispatcherInstalled
+            default:          true
             }
+        }
+        guard !isInstalled else { return }
+
+        // Two registrations racing each other may both get here. Installing a dispatcher twice is harmless,
+        // and it means neither returns before the dispatcher is in place.
+        switch kind {
+        case .update:
+            self.applyUpdateHook(enabled: true)
+            self.withBuckets { $0.updateDispatcherInstalled = true }
+        case .commit:
+            self.applyCommitHook(enabled: true)
+            self.withBuckets { $0.commitDispatcherInstalled = true }
+        case .rollback:
+            self.applyRollbackHook(enabled: true)
+            self.withBuckets { $0.rollbackDispatcherInstalled = true }
+        case .authorizer:
+            self.applyAuthorizerHook(enabled: true)
+            self.withBuckets { $0.authorizerDispatcherInstalled = true }
+        default:
+            break
         }
     }
 
-    /// Called after removing an observer to tear down the C-hook if nobody
-    /// is listening any longer.
-    fileprivate func removeHookAndUninstallDispatcherIfNeeded(kind: SQLiteHookKind, action: @Sendable (inout ObserverBuckets) -> Void) {
-        self.withBuckets { buckets in
-            action(&buckets)
-            switch kind {
-            case .update where buckets.updateHooks.isEmpty && buckets.updateDispatcherInstalled:
-                buckets.updateDispatcherInstalled = false
-                self.applyUpdateHook(enabled: false)
-            case .commit where buckets.commitObservers.isEmpty && buckets.commitValidator == nil && buckets.commitDispatcherInstalled:
-                buckets.commitDispatcherInstalled = false
-                self.applyCommitHook(enabled: false)
-            case .rollback where buckets.rollbackHooks.isEmpty && buckets.rollbackDispatcherInstalled:
-                buckets.rollbackDispatcherInstalled = false
-                self.applyRollbackHook(enabled: false)
-            case .authorizer where buckets.authorizerObservers.isEmpty && buckets.authorizerValidator == nil && buckets.authorizerDispatcherInstalled:
-                buckets.authorizerDispatcherInstalled = false
-                self.applyAuthorizerHook(enabled: false)
-            default:
-                break
-            }
-        }
+    /// Unregister an observer.
+    ///
+    /// This is what ``SQLiteHookToken/cancel()`` runs, so it may be called from any thread, including from
+    /// inside a hook callback. It only updates the observer table and never calls into SQLite: the dispatcher
+    /// is left installed, and does nothing while there are no observers for it to call.
+    fileprivate func removeHook(_ unregister: (inout ObserverBuckets) -> Void) {
+        self.withBuckets { unregister(&$0) }
     }
 }
 
@@ -765,7 +772,12 @@ extension SQLiteConnection {
         }
 
         _ = unsafe sqlite_nio_sqlite3_update_hook(self.handle.raw, { context, operation, database, table, row in
-            guard let connection = unsafe SQLiteConnection.connection(forHookContext: context),
+            guard let connection = unsafe SQLiteConnection.connection(forHookContext: context) else { return }
+
+            // Copy callbacks while locked, then invoke unlocked (avoid deadlock)
+            let callbacks = connection.withBuckets { Array($0.updateHooks.values) }
+
+            guard !callbacks.isEmpty,
                   let database = unsafe database.map(String.init(cString:)),
                   let table = unsafe table.map(String.init(cString:))
             else { return }
@@ -774,8 +786,6 @@ extension SQLiteConnection {
                                           database: database,
                                           table: table,
                                           rowID: row)
-            // Copy callbacks while locked, then invoke unlocked (avoid deadlock)
-            let callbacks = connection.withBuckets { Array($0.updateHooks.values) }
 
             for callback in callbacks {
                 callback(event)
@@ -793,12 +803,15 @@ extension SQLiteConnection {
         _ = unsafe sqlite_nio_sqlite3_commit_hook(self.handle.raw, { context in
             guard let connection = unsafe SQLiteConnection.connection(forHookContext: context) else { return 0 }
 
-            let event = SQLiteCommitEvent()
             // Copy validator and observers while locked, then invoke unlocked (avoid deadlock)
             let (validator, observers): (SQLiteCommitValidator?, [SQLiteCommitObserver]) =
             connection.withBuckets { buckets in
-                (buckets.commitValidator, Array(buckets.commitObservers.values))
+                (buckets.commitValidator?.validate, Array(buckets.commitObservers.values))
             }
+
+            guard validator != nil || !observers.isEmpty else { return 0 }
+
+            let event = SQLiteCommitEvent()
 
             // First check validator (if any). If validator denies, short-circuit (don't run observers)
             if let validator, validator(event) == .deny {
@@ -824,10 +837,12 @@ extension SQLiteConnection {
         _ = unsafe sqlite_nio_sqlite3_rollback_hook(self.handle.raw, { context in
             guard let connection = unsafe SQLiteConnection.connection(forHookContext: context) else { return }
 
-            let event = SQLiteRollbackEvent()
-
             // Copy callbacks while locked, then invoke unlocked (avoid deadlock)
             let callbacks = connection.withBuckets { Array($0.rollbackHooks.values) }
+
+            guard !callbacks.isEmpty else { return }
+
+            let event = SQLiteRollbackEvent()
 
             for callback in callbacks {
                 callback(event)
@@ -847,15 +862,18 @@ extension SQLiteConnection {
                 return SQLiteAuthorizerResponse.deny.rawValue
             }
 
+            // Copy validator and observers while locked, then invoke unlocked (avoid deadlock)
+            let (validator, observers) = connection.withBuckets { buckets in
+                (buckets.authorizerValidator?.validate, Array(buckets.authorizerObservers.values))
+            }
+
+            guard validator != nil || !observers.isEmpty else { return SQLiteAuthorizerResponse.allow.rawValue }
+
             let event = unsafe SQLiteAuthorizerEvent(action: SQLiteAuthorizerAction(rawValue: action),
                                                      parameter1: parameter1.map(String.init(cString:)),
                                                      parameter2: parameter2.map(String.init(cString:)),
                                                      database: database.map(String.init(cString:)),
                                                      trigger: trigger.map(String.init(cString:)))
-            // Copy validator and observers while locked, then invoke unlocked (avoid deadlock)
-            let (validator, observers) = connection.withBuckets { buckets in
-                (buckets.authorizerValidator, Array(buckets.authorizerObservers.values))
-            }
 
             // First check validator (if any)
             let validatorResponse = validator?(event) ?? .allow

@@ -76,6 +76,43 @@ struct SQLiteConnectionHookTests {
         }
     }
 
+    #if !os(WASI) // Needs a second thread to cancel from while the hook callback is running.
+    @Test(.timeLimit(.minutes(1)))
+    func cancelFromAnotherThreadDuringCallback() async throws {
+        try await withOpenedConnection { db in
+            try await makeUsersTable(in: db)
+
+            let events = Box<SQLiteUpdateEvent>()
+            let callbackEntered = Box<Void>()
+            let cancelReturned = Box<Void>()
+
+            let token = try await db.addUpdateObserver(lifetime: .pinned) { event in
+                events.append(event)
+                callbackEntered.append(())
+                // This runs inside `sqlite3_step()`, which holds SQLite's connection mutex. Stay here until the
+                // other task has cancelled the token. Give up after a while, so that a cancel which is stuck
+                // waiting for that mutex goes on to deadlock against the next row's callback.
+                let deadline = ContinuousClock.now + .seconds(2)
+                while cancelReturned.count() == 0, ContinuousClock.now < deadline {}
+            }
+
+            async let cancellation: Void = {
+                while callbackEntered.count() == 0 {
+                    try await Task.sleep(for: .milliseconds(1))
+                }
+                token.cancel()
+                cancelReturned.append(())
+            }()
+
+            // Three rows, so the hook would fire three times if the observer stayed registered.
+            try await db.exec("INSERT INTO users(name) VALUES('Alice'), ('Bob'), ('Carla')")
+            try await cancellation
+
+            #expect(events.count() == 1)
+        }
+    }
+    #endif
+
     // MARK: Commit / Rollback
 
     private func assertCommit(abort: Bool, sourceLocation: SourceLocation = #_sourceLocation()) async throws {
@@ -414,6 +451,57 @@ struct SQLiteConnectionHookTests {
 
             // Clean up first token (should be no-op since it was replaced)
             token1.cancel()
+        }
+    }
+
+    @Test
+    func cancellingReplacedCommitValidatorKeepsCurrentOne() async throws {
+        try await withOpenedConnection { db in
+            let calls1 = Box<Void>()
+            let calls2 = Box<Void>()
+
+            let token1 = try await db.setCommitValidator(lifetime: .pinned) { _ in calls1.append(()); return .allow }
+            let token2 = try await db.setCommitValidator(lifetime: .pinned) { _ in calls2.append(()); return .allow }
+
+            // The first validator has been replaced, so its token no longer has anything to remove.
+            token1.cancel()
+
+            try await db.exec("BEGIN")
+            try await db.exec("CREATE TABLE test1(id INT)")
+            try await db.exec("COMMIT")
+            #expect(calls1.count() == 0)
+            #expect(calls2.count() == 1)
+
+            token2.cancel()
+
+            try await db.exec("BEGIN")
+            try await db.exec("CREATE TABLE test2(id INT)")
+            try await db.exec("COMMIT")
+            #expect(calls2.count() == 1)
+        }
+    }
+
+    @Test
+    func cancellingReplacedAuthorizerValidatorKeepsCurrentOne() async throws {
+        try await withOpenedConnection { db in
+            let calls1 = Box<Void>()
+            let calls2 = Box<Void>()
+
+            let token1 = try await db.setAuthorizerValidator(lifetime: .pinned) { _ in calls1.append(()); return .allow }
+            let token2 = try await db.setAuthorizerValidator(lifetime: .pinned) { _ in calls2.append(()); return .allow }
+
+            // The first validator has been replaced, so its token no longer has anything to remove.
+            token1.cancel()
+
+            try await db.exec("SELECT 1")
+            #expect(calls1.count() == 0)
+            let callsBeforeCancel = calls2.count()
+            #expect(callsBeforeCancel > 0)
+
+            token2.cancel()
+
+            try await db.exec("SELECT 1")
+            #expect(calls2.count() == callsBeforeCancel)
         }
     }
 
