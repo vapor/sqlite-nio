@@ -14,7 +14,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 */
 import SQLiteNIO
 import Testing
-import NIOCore
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 private struct CustomValueType: SQLiteDataConvertible, Equatable {
     init() {}
@@ -76,11 +80,11 @@ struct DatabaseFunctionTests {
     @Test
     func functionReturningData() async throws {
         try await withOpenedConnection { conn in
-            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in ByteBuffer(bytes: "foo".utf8) }
+            let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in Data("foo".utf8) }
             try await conn.install(customFunction: fn)
 
-            #expect(try await ByteBuffer(string: "foo") == conn.query("SELECT f() as result").first?.column("result")?.blob)
-            #expect(try await ByteBuffer(string: "bar") != conn.query("SELECT f() as result").first?.column("result")?.blob)
+            #expect(try await Data("foo".utf8) == conn.query("SELECT f() as result").first?.column("result")?.blob)
+            #expect(try await Data("bar".utf8) != conn.query("SELECT f() as result").first?.column("result")?.blob)
         }
     }
 
@@ -152,8 +156,8 @@ struct DatabaseFunctionTests {
             try await conn.install(customFunction: fn)
 
             #expect(try await conn.query("SELECT f(NULL) as result").first?.column("result")?.blob == nil)
-            #expect(try await ByteBuffer(string: "foo") == conn.query("SELECT f(?) as result", [.blob(ByteBuffer(string: "foo"))]).first?.column("result")?.blob)
-            #expect(try await ByteBuffer() == conn.query("SELECT f(?) as result", [.blob(ByteBuffer())]).first?.column("result")?.blob)
+            #expect(try await Data("foo".utf8) == conn.query("SELECT f(?) as result", [.blob(Data("foo".utf8))]).first?.column("result")?.blob)
+            #expect(try await Data() == conn.query("SELECT f(?) as result", [.blob(Data())]).first?.column("result")?.blob)
         }
     }
 
