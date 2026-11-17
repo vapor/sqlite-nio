@@ -79,11 +79,11 @@ public final class SQLiteCustomFunction: Hashable {
     ///
     ///     let connection: SQLiteConnection = ...
     ///     let fn = SQLiteCustomFunction("mysum", argumentCount: 1, pure: true, aggregate: MySum.self)
-    ///     try await connection.install(customFunction: fn).get()
-    ///     try await connection.query("CREATE TABLE test(i)").get()
-    ///     try await connection.query("INSERT INTO test(i) VALUES (1)").get()
-    ///     try await connection.query("INSERT INTO test(i) VALUES (2)").get()
-    ///     let sum = (try await connection.query("SELECT mysum(i) FROM test").get().first?.columns.first?.integer)! // 3
+    ///     try await connection.install(customFunction: fn)
+    ///     try await connection.query("CREATE TABLE test(i)")
+    ///     try await connection.query("INSERT INTO test(i) VALUES (1)")
+    ///     try await connection.query("INSERT INTO test(i) VALUES (2)")
+    ///     let sum = (try await connection.query("SELECT mysum(i) FROM test").first?.columns.first?.integer)! // 3
     ///
     /// - Parameters:
     ///   - name: The function name.
@@ -353,11 +353,11 @@ extension SQLiteCustomFunction {
 ///
 ///     let connection: SQLiteConnection = ...
 ///     let fn = SQLiteCustomFunction("mysum", argumentCount: 1, aggregate: MySum.self)
-///     try await connection.install(customFunction: fn).get()
-///     try await connection.query("CREATE TABLE test(i)").get()
-///     try await connection.query("INSERT INTO test(i) VALUES (1)").get()
-///     try await connection.query("INSERT INTO test(i) VALUES (2)").get()
-///     let sum = (try await connection.query("SELECT mysum(i) FROM test").get().first?.columns.first?.integer)!
+///     try await connection.install(customFunction: fn)
+///     try await connection.query("CREATE TABLE test(i)")
+///     try await connection.query("INSERT INTO test(i) VALUES (1)")
+///     try await connection.query("INSERT INTO test(i) VALUES (2)")
+///     let sum = (try await connection.query("SELECT mysum(i) FROM test").first?.columns.first?.integer)!
 public protocol SQLiteCustomAggregate: Sendable {
     /// Create an aggregate.
     init()
