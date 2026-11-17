@@ -52,11 +52,17 @@ let package = Package(
 
 var swiftSettings: [SwiftSetting] { [
     // .strictMemorySafety(),
+    .treatAllWarnings(as: .error),
     .enableUpcomingFeature("ExistentialAny"),
-    // .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
     .enableUpcomingFeature("MemberImportVisibility"),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    // .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("ImmutableWeakCaptures"),
+    .enableExperimentalFeature("SuppressedAssociatedTypesWithDefaults"),
+    .enableExperimentalFeature("LifetimeDependence"),
+    .enableExperimentalFeature("Lifetimes"),
+    .enableUpcomingFeature("LifetimeDependence"),
     .enableUpcomingFeature("ImmutableWeakCaptures"),
 ] }
 

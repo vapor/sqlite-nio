@@ -1,8 +1,8 @@
 import VaporCSQLite
 #if canImport(FoundationEssentials)
-import FoundationEssentials
+public import FoundationEssentials
 #else
-import Foundation
+public import Foundation
 #endif
 
 /// On 32-bit platforms, use an explicitly 64-bit integer type. On other platforms, use the platform-native
