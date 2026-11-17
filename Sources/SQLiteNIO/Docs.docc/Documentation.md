@@ -18,7 +18,7 @@ dependencies: [
 
 ### Supported Platforms
 
-SQLiteNIO supports all platforms with a Swift 6.2+ toolchain. At the time of this writing, these include:
+SQLiteNIO supports all platforms with a Swift 6.3+ toolchain. At the time of this writing, these include:
 
 - Ubuntu 22.04+
 - macOS 15+
