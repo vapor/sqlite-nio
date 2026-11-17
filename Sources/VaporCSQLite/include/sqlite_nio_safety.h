@@ -19,11 +19,6 @@ SQLITE_API sqlite3_int64 sqlite_nio_sqlite3_value_int64(sqlite3_value*) SQLITE_N
 SQLITE_API double sqlite_nio_sqlite3_value_double(sqlite3_value*) SQLITE_NIO_SWIFT_SAFE;
 SQLITE_API int sqlite_nio_sqlite3_value_bytes(sqlite3_value*) SQLITE_NIO_SWIFT_SAFE;
 
-/*
-** Statement functions. These are safe because `SQLiteStatement` uniquely owns its handle, and because
-** each of them tolerates a NULL statement (the handle's value after it has been finalized) and the lifetime
-** of the statement is enforced by NonCopyable.
-*/
 SQLITE_API int sqlite_nio_sqlite3_step(sqlite3_stmt*) SQLITE_NIO_SWIFT_SAFE;
 SQLITE_API int sqlite_nio_sqlite3_bind_double(sqlite3_stmt*, int, double) SQLITE_NIO_SWIFT_SAFE;
 SQLITE_API int sqlite_nio_sqlite3_bind_int64(sqlite3_stmt*, int, sqlite3_int64) SQLITE_NIO_SWIFT_SAFE;
@@ -33,6 +28,11 @@ SQLITE_API int sqlite_nio_sqlite3_column_type(sqlite3_stmt*, int) SQLITE_NIO_SWI
 SQLITE_API sqlite3_int64 sqlite_nio_sqlite3_column_int64(sqlite3_stmt*, int) SQLITE_NIO_SWIFT_SAFE;
 SQLITE_API double sqlite_nio_sqlite3_column_double(sqlite3_stmt*, int) SQLITE_NIO_SWIFT_SAFE;
 SQLITE_API int sqlite_nio_sqlite3_column_bytes(sqlite3_stmt*, int) SQLITE_NIO_SWIFT_SAFE;
+
+SQLITE_API void sqlite_nio_sqlite3_result_null(sqlite3_context*) SQLITE_NIO_SWIFT_SAFE;
+SQLITE_API void sqlite_nio_sqlite3_result_int64(sqlite3_context*, sqlite3_int64) SQLITE_NIO_SWIFT_SAFE;
+SQLITE_API void sqlite_nio_sqlite3_result_double(sqlite3_context*, double) SQLITE_NIO_SWIFT_SAFE;
+SQLITE_API void sqlite_nio_sqlite3_result_error_code(sqlite3_context*, int) SQLITE_NIO_SWIFT_SAFE;
 
 #ifdef __cplusplus
 }
