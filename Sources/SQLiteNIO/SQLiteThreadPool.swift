@@ -1,11 +1,11 @@
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
-@preconcurrency import Glibc
+import Glibc
 #elseif canImport(Musl)
-@preconcurrency import Musl
+import Musl
 #elseif canImport(Android)
-@preconcurrency import Android
+import Android
 #elseif os(Windows)
 import WinSDK
 #endif
@@ -32,7 +32,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
 
     public func enqueue(_ job: consuming ExecutorJob) {
         // WASI is single-threaded
-        job.runSynchronously(on: self.asUnownedTaskExecutor())
+        unsafe job.runSynchronously(on: self.asUnownedTaskExecutor())
     }
 
     #else
@@ -42,7 +42,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
     static var defaultThreadCount: Int {
         #if os(Windows)
         var info = SYSTEM_INFO()
-        GetSystemInfo(&info)
+        unsafe GetSystemInfo(&info)
         return max(1, Int(info.dwNumberOfProcessors))
         #else
         return Int(max(1, sysconf(Int32(_SC_NPROCESSORS_ONLN))))
@@ -61,9 +61,9 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
     }
 
     private func workerLoop() {
-        let unownedExecutor = self.asUnownedTaskExecutor()
+        let unownedExecutor = unsafe self.asUnownedTaskExecutor()
         while true {
-            self.queue.pop().runSynchronously(on: unownedExecutor)
+            unsafe self.queue.pop().runSynchronously(on: unownedExecutor)
         }
     }
 
@@ -77,35 +77,35 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
             }
         }
         // This is never released as the thread runs forever
-        let context = Unmanaged.passRetained(Context(pool: pool, name: name)).toOpaque()
+        let context = unsafe Unmanaged.passRetained(Context(pool: pool, name: name)).toOpaque()
 
         // 2 MB on every platform
         let workerStackSize = 1 << 21
 
         #if os(Windows)
-        let handle = CreateThread(nil, SIZE_T(workerStackSize), { arg in
-            let context = Unmanaged<Context>.fromOpaque(arg!).takeRetainedValue()
-            _ = context.name.withCString(encodedAs: UTF16.self) {
-                SetThreadDescription(GetCurrentThread(), $0)
+        let handle = unsafe CreateThread(nil, SIZE_T(workerStackSize), { arg in
+            let context = unsafe Unmanaged<Context>.fromOpaque(arg!).takeRetainedValue()
+            _ = unsafe context.name.withCString(encodedAs: UTF16.self) {
+                unsafe SetThreadDescription(GetCurrentThread(), $0)
             }
             context.pool.workerLoop()
             return 0
         }, context, 0, nil)
-        precondition(handle != nil, "SQLiteThreadPool failed to spawn a worker thread (error \(GetLastError()))")
-        CloseHandle(handle)
+        precondition(unsafe handle != nil, "SQLiteThreadPool failed to spawn a worker thread (error \(GetLastError()))")
+        unsafe CloseHandle(handle)
         #else
 
         var attr = pthread_attr_t()
-        precondition(pthread_attr_init(&attr) == 0)
-        precondition(pthread_attr_setstacksize(&attr, workerStackSize) == 0)
-        defer { pthread_attr_destroy(&attr) }
+        precondition(unsafe pthread_attr_init(&attr) == 0)
+        precondition(unsafe pthread_attr_setstacksize(&attr, workerStackSize) == 0)
+        defer { unsafe pthread_attr_destroy(&attr) }
 
         // Handle pthread differences between platforms, such as `pthread_t` being a pointer on Darwin and Musl, but integer on Glibc and Android
         #if canImport(Darwin)
         var tid: pthread_t? = nil
-        let createRet = pthread_create(&tid, &attr, { arg in
-            let context = Unmanaged<Context>.fromOpaque(arg).takeRetainedValue()
-            pthread_setname_np(context.name)
+        let createRet = unsafe pthread_create(&tid, &attr, { arg in
+            let context = unsafe Unmanaged<Context>.fromOpaque(arg).takeRetainedValue()
+            unsafe pthread_setname_np(context.name)
             context.pool.workerLoop()
             return nil
         }, context)
@@ -115,8 +115,8 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
         #else
         var tid = pthread_t()
         #endif
-        let createRet = pthread_create(&tid, &attr, { arg in
-            let context = Unmanaged<Context>.fromOpaque(arg!).takeRetainedValue()
+        let createRet = unsafe pthread_create(&tid, &attr, { arg in
+            let context = unsafe Unmanaged<Context>.fromOpaque(arg!).takeRetainedValue()
             context.pool.workerLoop()
             return nil
         }, context)
@@ -134,7 +134,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
 ///
 /// We can't use `Mutex` because we need a condition variable for a blocking `pop()` so use the platform's native pair directly:
 /// pthreads on POSIX platforms, an `SRWLOCK` and `CONDITION_VARIABLE` on Windows.
-private final class JobQueue: @unchecked Sendable {
+@safe private final class JobQueue: @unchecked Sendable {
     #if os(Windows)
 
     private let lock: UnsafeMutablePointer<SRWLOCK>
@@ -142,34 +142,34 @@ private final class JobQueue: @unchecked Sendable {
     private var jobs: [UnownedJob] = []
 
     init() {
-        self.lock = .allocate(capacity: 1)
-        self.condition = .allocate(capacity: 1)
-        InitializeSRWLock(self.lock)
-        InitializeConditionVariable(self.condition)
+        unsafe self.lock = .allocate(capacity: 1)
+        unsafe self.condition = .allocate(capacity: 1)
+        unsafe InitializeSRWLock(self.lock)
+        unsafe InitializeConditionVariable(self.condition)
     }
 
     deinit {
         // SRW locks and condition variables have no teardown functions.
-        self.condition.deallocate()
-        self.lock.deallocate()
+        unsafe self.condition.deallocate()
+        unsafe self.lock.deallocate()
     }
 
     func push(_ job: UnownedJob) {
-        AcquireSRWLockExclusive(self.lock)
+        unsafe AcquireSRWLockExclusive(self.lock)
         self.jobs.append(job)
-        WakeConditionVariable(self.condition)
-        ReleaseSRWLockExclusive(self.lock)
+        unsafe WakeConditionVariable(self.condition)
+        unsafe ReleaseSRWLockExclusive(self.lock)
     }
 
     /// Blocks the calling thread until a job is available.
     func pop() -> UnownedJob {
-        AcquireSRWLockExclusive(self.lock)
+        unsafe AcquireSRWLockExclusive(self.lock)
         while self.jobs.isEmpty {
             // DWORD.max is INFINITE; flags 0 means the lock is held in exclusive mode.
-            SleepConditionVariableSRW(self.condition, self.lock, DWORD.max, 0)
+            unsafe SleepConditionVariableSRW(self.condition, self.lock, DWORD.max, 0)
         }
         let job = self.jobs.removeFirst()
-        ReleaseSRWLockExclusive(self.lock)
+        unsafe ReleaseSRWLockExclusive(self.lock)
         return job
     }
 
@@ -180,34 +180,34 @@ private final class JobQueue: @unchecked Sendable {
     private var jobs: [UnownedJob] = []
 
     init() {
-        self.mutex = .allocate(capacity: 1)
-        self.condition = .allocate(capacity: 1)
-        precondition(pthread_mutex_init(self.mutex, nil) == 0)
-        precondition(pthread_cond_init(self.condition, nil) == 0)
+        unsafe self.mutex = .allocate(capacity: 1)
+        unsafe self.condition = .allocate(capacity: 1)
+        precondition(unsafe pthread_mutex_init(self.mutex, nil) == 0)
+        precondition(unsafe pthread_cond_init(self.condition, nil) == 0)
     }
 
     deinit {
-        precondition(pthread_cond_destroy(self.condition) == 0)
-        precondition(pthread_mutex_destroy(self.mutex) == 0)
-        self.condition.deallocate()
-        self.mutex.deallocate()
+        precondition(unsafe pthread_cond_destroy(self.condition) == 0)
+        precondition(unsafe pthread_mutex_destroy(self.mutex) == 0)
+        unsafe self.condition.deallocate()
+        unsafe self.mutex.deallocate()
     }
 
     func push(_ job: UnownedJob) {
-        pthread_mutex_lock(self.mutex)
+        unsafe pthread_mutex_lock(self.mutex)
         self.jobs.append(job)
-        pthread_cond_signal(self.condition)
-        pthread_mutex_unlock(self.mutex)
+        unsafe pthread_cond_signal(self.condition)
+        unsafe pthread_mutex_unlock(self.mutex)
     }
 
     /// Blocks the calling thread until a job is available.
     func pop() -> UnownedJob {
-        pthread_mutex_lock(self.mutex)
+        unsafe pthread_mutex_lock(self.mutex)
         while self.jobs.isEmpty {
-            pthread_cond_wait(self.condition, self.mutex)
+            unsafe pthread_cond_wait(self.condition, self.mutex)
         }
         let job = self.jobs.removeFirst()
-        pthread_mutex_unlock(self.mutex)
+        unsafe pthread_mutex_unlock(self.mutex)
         return job
     }
 
