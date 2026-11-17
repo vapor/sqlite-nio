@@ -33,7 +33,7 @@ final class CountingInlineExecutor: TaskExecutor {
 
     func enqueue(_ job: consuming ExecutorJob) {
         self.enqueueCount.withLock { $0 += 1 }
-        job.runSynchronously(on: self.asUnownedTaskExecutor())
+        unsafe job.runSynchronously(on: self.asUnownedTaskExecutor())
     }
 }
 

@@ -51,7 +51,7 @@ let package = Package(
 )
 
 var swiftSettings: [SwiftSetting] { [
-    // .strictMemorySafety(),
+    .strictMemorySafety(),
     .treatAllWarnings(as: .error),
     .enableUpcomingFeature("ExistentialAny"),
     .enableUpcomingFeature("InternalImportsByDefault"),
