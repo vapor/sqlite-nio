@@ -1,4 +1,8 @@
-import NIOCore
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 import VaporCSQLite
 
 struct SQLiteStatement {
@@ -40,7 +44,7 @@ struct SQLiteStatement {
             
             switch bind {
             case .blob(let value):
-                ret = value.withUnsafeReadableBytes {
+                ret = value.withUnsafeBytes {
                     sqlite_nio_sqlite3_bind_blob64(self.handle, i, $0.baseAddress, UInt64($0.count), SQLITE_TRANSIENT)
                 }
             case .float(let value):
@@ -102,12 +106,11 @@ struct SQLiteStatement {
             return .text(.init(cString: val))
         case SQLITE_BLOB:
             let length = Int(sqlite_nio_sqlite3_column_bytes(self.handle, offset))
-            var buffer = ByteBufferAllocator().buffer(capacity: length)
-            
             if let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) {
-                buffer.writeBytes(UnsafeRawBufferPointer(start: blobPointer, count: length))
+                return .blob(Data(bytes: blobPointer, count: length))
+            } else {
+                return .blob(Data())
             }
-            return .blob(buffer)
         case SQLITE_NULL:
             return .null
         default:

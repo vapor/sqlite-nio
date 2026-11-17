@@ -13,7 +13,11 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 import VaporCSQLite
-import NIOCore
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 /// An SQL function or aggregate.
 public final class SQLiteCustomFunction: Hashable {
@@ -301,8 +305,8 @@ public final class SQLiteCustomFunction: Hashable {
         case .text(let string):
             sqlite_nio_sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
         case .blob(let value):
-            value.withUnsafeReadableBytes { pointer in
-                sqlite_nio_sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.readableBytes), SQLITE_TRANSIENT)
+            value.withUnsafeBytes { pointer in
+                sqlite_nio_sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.count), SQLITE_TRANSIENT)
             }
         }
     }

@@ -93,7 +93,7 @@ extension Float: SQLiteDataConvertible {
     }
 }
 
-extension ByteBuffer: SQLiteDataConvertible {
+extension Data: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         guard case .blob(let value) = sqliteData else {
             return nil
@@ -103,19 +103,6 @@ extension ByteBuffer: SQLiteDataConvertible {
 
     public var sqliteData: SQLiteData? {
         .blob(self)
-    }
-}
-
-extension Data: SQLiteDataConvertible {
-    public init?(sqliteData: SQLiteData) {
-        guard case .blob(let value) = sqliteData else {
-            return nil
-        }
-        self = .init(buffer: value, byteTransferStrategy: .copy)
-    }
-
-    public var sqliteData: SQLiteData? {
-        .blob(.init(data: self))
     }
 }
 
