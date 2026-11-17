@@ -14,7 +14,6 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.101.3"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     ],
     targets: [
@@ -38,10 +37,6 @@ let package = Package(
             dependencies: [
                 .target(name: "VaporCSQLite"),
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio",
-                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
-                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
         ),
@@ -49,10 +44,6 @@ let package = Package(
             name: "SQLiteNIOTests",
             dependencies: [
                 .target(name: "SQLiteNIO"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio",
-                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
-                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
         ),
