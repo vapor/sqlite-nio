@@ -7,7 +7,7 @@
 [![MIT License](https://design.vapor.codes/images/mitlicense.svg)](./LICENSE)
 [![Continuous Integration](https://img.shields.io/github/actions/workflow/status/vapor/sqlite-nio/test.yml?event=push&style=plastic&logo=github&label=tests&logoColor=ccc)](https://github.com/vapor/sqlite-nio/actions/workflows/test.yml)
 [![Code Coverage](https://img.shields.io/codecov/c/github/vapor/sqlite-nio?style=plastic&logo=codecov&label=codecov)](https://codecov.io/github/vapor/sqlite-nio)
-[![Swift 6.1+](https://design.vapor.codes/images/swift61up.svg)](https://swift.org)
+[![Swift 6.2+](https://design.vapor.codes/images/swift61up.svg)](https://swift.org)
 
 </div>
 
@@ -27,7 +27,7 @@ dependencies: [
 
 ### Supported Platforms
 
-SQLiteNIO supports all platforms with a Swift 6.1+ toolchain. At the time of this writing, these include:
+SQLiteNIO supports all platforms with a Swift 6.2+ toolchain. At the time of this writing, these include:
 
 - Ubuntu 22.04+
 - macOS 15+
