@@ -1,4 +1,4 @@
-// swift-tools-version:6.1
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
@@ -49,6 +49,10 @@ let package = Package(
             name: "SQLiteNIOTests",
             dependencies: [
                 .target(name: "SQLiteNIO"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio",
+                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
+                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
         ),
@@ -56,6 +60,7 @@ let package = Package(
 )
 
 var swiftSettings: [SwiftSetting] { [
+    // .strictMemorySafety(),
     .enableUpcomingFeature("ExistentialAny"),
     // .enableUpcomingFeature("InternalImportsByDefault"),
     .enableUpcomingFeature("MemberImportVisibility"),

@@ -12,12 +12,9 @@ import WASILibc
 import CRT
 #endif
 
-import NIOCore
 #if canImport(FoundationEssentials)
-import NIOFoundationEssentialsCompat
 import FoundationEssentials
 #else
-import NIOFoundationCompat
 import Foundation
 #endif
 
