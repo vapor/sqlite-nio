@@ -121,6 +121,21 @@ struct SQLiteNIOTests {
     }
 
     @Test
+    func floatToIntegerConversion() {
+        #expect(SQLiteData.float(1.9).integer == 1)
+        #expect(SQLiteData.float(-1.9).integer == -1)
+        #expect(SQLiteData.float(-0.0).integer == 0)
+        #expect(SQLiteData.float(.infinity).integer == nil)
+        #expect(SQLiteData.float(-.infinity).integer == nil)
+        #expect(SQLiteData.float(.nan).integer == nil)
+        #expect(SQLiteData.float(1e300).integer == nil)
+        #expect(SQLiteData.float(-1e300).integer == nil)
+        // 2^63 is one past `Int64.max`; -2^63 is exactly `Int64.min`.
+        #expect(SQLiteData.float(9_223_372_036_854_775_808.0).integer == nil)
+        #expect(SQLiteData.float(-9_223_372_036_854_775_808.0).integer == .min)
+    }
+
+    @Test
     func integerConversionFailsWhenOutOfRange() {
         #expect(Int8(sqliteData: .integer(127)) == 127)
         #expect(Int8(sqliteData: .integer(128)) == nil)

@@ -36,12 +36,13 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
 
     /// Returns the integer value of the data, performing conversions where possible.
     ///
-    /// If the data has `REAL` or `TEXT` affinity, an attempt is made to interpret the value as an integer. `BLOB`
-    /// and `NULL` values always return `nil`.
+    /// If the data has `REAL` or `TEXT` affinity, an attempt is made to interpret the value as an integer. `REAL`
+    /// values are truncated towards zero and values which cannot be represented as an integer (infinity, NaN, or
+    /// out of range) return `nil`. `BLOB` and `NULL` values always return `nil`.
     public var integer: SQLiteInt64? {
         switch self {
         case .integer(let integer): integer
-        case .float(let double):    .init(double)
+        case .float(let double):    .init(exactly: double.rounded(.towardZero))
         case .text(let string):     .init(string)
         case .blob, .null:          nil
         }
