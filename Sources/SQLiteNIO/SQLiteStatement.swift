@@ -5,8 +5,8 @@ import Foundation
 #endif
 import VaporCSQLite
 
-struct SQLiteStatement {
-    private var handle: OpaquePointer?
+@safe struct SQLiteStatement: ~Copyable {
+    @safe private var handle: OpaquePointer?
     private let connection: SQLiteConnection
 
     init(query: String, on connection: SQLiteConnection) throws {
@@ -23,6 +23,12 @@ struct SQLiteStatement {
         // Can't use self.check() here, there's nothing to finalize yet on failure.
         guard ret == SQLITE_OK else {
             throw SQLiteError(statusCode: ret, connection: connection)
+        }
+    }
+
+    deinit {
+        if let handle = self.handle {
+            unsafe sqlite_nio_sqlite3_finalize(handle)
         }
     }
     
