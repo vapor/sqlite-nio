@@ -68,6 +68,37 @@ struct SQLiteNIOTests {
         #expect(executor.enqueueCount.withLock { $0 } >= 3)
     }
 
+    #if !os(WASI) // The pool runs jobs inline on WASI, so a backlog can never form.
+    @Test(.timeLimit(.minutes(1)))
+    func sharedPoolRunsEveryJobInABacklog() async {
+        final class State: Sendable {
+            let isGateOpen = Atomic(false)
+            let completed = Atomic(0)
+        }
+        let state = State()
+        let pool = SQLiteThreadPool.shared
+        let jobCount = 20_000
+
+        await withTaskGroup(of: Void.self) { group in
+            // Occupy every worker (far more blockers than any machine has cores), so that the jobs added
+            // below pile up in the pool's queue instead of being run as they arrive.
+            for _ in 0 ..< 256 {
+                group.addTask(executorPreference: pool) {
+                    while !state.isGateOpen.load(ordering: .acquiring) {}
+                }
+            }
+            for _ in 0 ..< jobCount {
+                group.addTask(executorPreference: pool) {
+                    state.completed.add(1, ordering: .relaxed)
+                }
+            }
+            state.isGateOpen.store(true, ordering: .releasing)
+        }
+
+        #expect(state.completed.load(ordering: .relaxed) == jobCount)
+    }
+    #endif
+
     @Test
     func zeroLengthBlob() async throws {
         try await withOpenedConnection { conn in

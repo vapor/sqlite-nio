@@ -139,7 +139,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
 
     private let lock: UnsafeMutablePointer<SRWLOCK>
     private let condition: UnsafeMutablePointer<CONDITION_VARIABLE>
-    private var jobs: [UnownedJob] = []
+    private var jobs = JobBuffer()
 
     init() {
         unsafe self.lock = .allocate(capacity: 1)
@@ -177,7 +177,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
 
     private let mutex: UnsafeMutablePointer<pthread_mutex_t>
     private let condition: UnsafeMutablePointer<pthread_cond_t>
-    private var jobs: [UnownedJob] = []
+    private var jobs = JobBuffer()
 
     init() {
         unsafe self.mutex = .allocate(capacity: 1)
@@ -212,5 +212,41 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
     }
 
     #endif
+}
+
+/// A FIFO of jobs with amortised constant-time append and removal
+private struct JobBuffer {
+    private var storage: [UnownedJob] = []
+    private var head = 0
+
+    /// Consumed jobs are only discarded from a non-empty buffer once there are at least this many of them,
+    /// and storage no larger than this is kept for reuse when the buffer drains.
+    private static var compactionThreshold: Int { 1024 }
+
+    var isEmpty: Bool {
+        self.head == self.storage.count
+    }
+
+    mutating func append(_ job: UnownedJob) {
+        self.storage.append(job)
+    }
+
+    /// The buffer must not be empty.
+    mutating func removeFirst() -> UnownedJob {
+        let job = self.storage[self.head]
+        self.head += 1
+
+        if self.head == self.storage.count {
+            // Drained: start again from the front, without holding on to a large allocation after a burst.
+            self.storage.removeAll(keepingCapacity: self.storage.capacity <= Self.compactionThreshold)
+            self.head = 0
+        } else if self.head >= Self.compactionThreshold, self.head >= self.storage.count - self.head {
+            // At least half of the storage has been consumed. Discarding it moves no more jobs than it
+            // discards, which keeps removal amortised constant-time.
+            self.storage.removeFirst(self.head)
+            self.head = 0
+        }
+        return job
+    }
 }
 #endif
