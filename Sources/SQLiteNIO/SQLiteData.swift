@@ -1,5 +1,9 @@
 import VaporCSQLite
-import NIOCore
+#if canImport(FoundationEssentials)
+public import FoundationEssentials
+#else
+public import Foundation
+#endif
 
 /// On 32-bit platforms, use an explicitly 64-bit integer type. On other platforms, use the platform-native
 /// integer width, as we don't expect to ever support platforms with less than 32 bits. Most users will not
@@ -24,20 +28,21 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// `TEXT` affinity, represented in Swift by `String`.
     case text(String)
 
-    /// `BLOB` affinity, represented in Swift by `ByteBuffer`.
-    case blob(ByteBuffer)
+    /// `BLOB` affinity, represented in Swift by `Data`.
+    case blob(Data)
 
     /// A `NULL` value.
     case null
 
     /// Returns the integer value of the data, performing conversions where possible.
     ///
-    /// If the data has `REAL` or `TEXT` affinity, an attempt is made to interpret the value as an integer. `BLOB`
-    /// and `NULL` values always return `nil`.
+    /// If the data has `REAL` or `TEXT` affinity, an attempt is made to interpret the value as an integer. `REAL`
+    /// values are truncated towards zero and values which cannot be represented as an integer (infinity, NaN, or
+    /// out of range) return `nil`. `BLOB` and `NULL` values always return `nil`.
     public var integer: SQLiteInt64? {
         switch self {
         case .integer(let integer): integer
-        case .float(let double):    .init(double)
+        case .float(let double):    .init(exactly: double.rounded(.towardZero))
         case .text(let string):     .init(string)
         case .blob, .null:          nil
         }
@@ -84,9 +89,9 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// Returns the data as a blob, if it has `BLOB` affinity.
     ///
     /// `INTEGER`, `REAL`, `TEXT`, and `NULL` values always return `nil`.
-    public var blob: ByteBuffer? {
+    public var blob: Data? {
         switch self {
-        case .blob(let buffer):              buffer
+        case .blob(let data): data
         case .integer, .float, .text, .null: nil
         }
     }
@@ -102,7 +107,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     // See `CustomStringConvertible.description`.
     public var description: String {
         switch self {
-        case .blob(let data):   "<\(data.readableBytes) bytes>"
+        case .blob(let data):   "<\(data.count) bytes>"
         case .float(let float): float.description
         case .integer(let int): int.description
         case .null:             "null"
@@ -117,7 +122,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
         case .integer(let value): try container.encode(value)
         case .float(let value):   try container.encode(value)
         case .text(let value):    try container.encode(value)
-        case .blob(let value):    try container.encode(Array(value.readableBytesView)) // N.B.: Don't use ByteBuffer's Codable conformance; it encodes as Base64, not raw bytes
+        case .blob(let value):    try container.encode(Array(value)) // N.B.: Don't use Data's Codable conformance; it encodes as Base64, not raw bytes
         case .null:               try container.encodeNil()
         }
     }
@@ -134,17 +139,17 @@ extension SQLiteData {
         case SQLITE_FLOAT:
             self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
         case SQLITE_TEXT:
-            if let raw = sqlite_nio_sqlite3_value_text(sqliteValue) {
-                self = .text(String.init(cString: raw))
+            if let raw = unsafe sqlite_nio_sqlite3_value_text(sqliteValue) {
+                self = unsafe .text(String.init(cString: raw))
             } else {
                 self = .text("")
             }
         case SQLITE_BLOB:
-            if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
+            if let bytes = unsafe sqlite_nio_sqlite3_value_blob(sqliteValue) {
                 let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
-                let buffer = ByteBuffer(bytes: UnsafeRawBufferPointer(start: bytes, count: count))
+                let data = unsafe Data(bytes: bytes, count: count)
 
-                self = .blob(buffer) // copy bytes
+                self = .blob(data) // copy bytes
             } else {
                 self = .blob(.init())
             }

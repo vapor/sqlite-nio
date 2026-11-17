@@ -1,19 +1,19 @@
-// swift-tools-version:6.1
+// swift-tools-version:6.3
 import PackageDescription
 
 let package = Package(
     name: "sqlite-nio",
     platforms: [
-        .macOS(.v10_15),
-        .iOS(.v13),
-        .watchOS(.v6),
-        .tvOS(.v13),
+        .macOS(.v15),
+        .iOS(.v18),
+        .watchOS(.v11),
+        .tvOS(.v18),
+        .visionOS(.v2),
     ],
     products: [
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.101.3"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     ],
     targets: [
@@ -37,11 +37,6 @@ let package = Package(
             dependencies: [
                 .target(name: "VaporCSQLite"),
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio",
-                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
-                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
         ),
@@ -56,12 +51,18 @@ let package = Package(
 )
 
 var swiftSettings: [SwiftSetting] { [
+    .strictMemorySafety(),
+    .treatAllWarnings(as: .error),
     .enableUpcomingFeature("ExistentialAny"),
-    // .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
     .enableUpcomingFeature("MemberImportVisibility"),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    // .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
     .enableUpcomingFeature("ImmutableWeakCaptures"),
+    .enableExperimentalFeature("SuppressedAssociatedTypesWithDefaults"),
+    .enableExperimentalFeature("LifetimeDependence"),
+    .enableExperimentalFeature("Lifetimes"),
+    .enableUpcomingFeature("LifetimeDependence"),
 ] }
 
 var sqliteCSettings: [CSetting] { [

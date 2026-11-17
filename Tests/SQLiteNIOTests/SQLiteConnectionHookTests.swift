@@ -1,6 +1,6 @@
 import SQLiteNIO
 import Testing
-import NIOConcurrencyHelpers
+import Synchronization
 
 @Suite("SQLite Connection Hook Tests")
 struct SQLiteConnectionHookTests {
@@ -75,6 +75,43 @@ struct SQLiteConnectionHookTests {
             #expect(updates.count() == 1) // unchanged
         }
     }
+
+    #if !os(WASI) // Needs a second thread to cancel from while the hook callback is running.
+    @Test(.timeLimit(.minutes(1)))
+    func cancelFromAnotherThreadDuringCallback() async throws {
+        try await withOpenedConnection { db in
+            try await makeUsersTable(in: db)
+
+            let events = Box<SQLiteUpdateEvent>()
+            let callbackEntered = Box<Void>()
+            let cancelReturned = Box<Void>()
+
+            let token = try await db.addUpdateObserver(lifetime: .pinned) { event in
+                events.append(event)
+                callbackEntered.append(())
+                // This runs inside `sqlite3_step()`, which holds SQLite's connection mutex. Stay here until the
+                // other task has cancelled the token. Give up after a while, so that a cancel which is stuck
+                // waiting for that mutex goes on to deadlock against the next row's callback.
+                let deadline = ContinuousClock.now + .seconds(2)
+                while cancelReturned.count() == 0, ContinuousClock.now < deadline {}
+            }
+
+            async let cancellation: Void = {
+                while callbackEntered.count() == 0 {
+                    try await Task.sleep(for: .milliseconds(1))
+                }
+                token.cancel()
+                cancelReturned.append(())
+            }()
+
+            // Three rows, so the hook would fire three times if the observer stayed registered.
+            try await db.exec("INSERT INTO users(name) VALUES('Alice'), ('Bob'), ('Carla')")
+            try await cancellation
+
+            #expect(events.count() == 1)
+        }
+    }
+    #endif
 
     // MARK: Commit / Rollback
 
@@ -418,6 +455,57 @@ struct SQLiteConnectionHookTests {
     }
 
     @Test
+    func cancellingReplacedCommitValidatorKeepsCurrentOne() async throws {
+        try await withOpenedConnection { db in
+            let calls1 = Box<Void>()
+            let calls2 = Box<Void>()
+
+            let token1 = try await db.setCommitValidator(lifetime: .pinned) { _ in calls1.append(()); return .allow }
+            let token2 = try await db.setCommitValidator(lifetime: .pinned) { _ in calls2.append(()); return .allow }
+
+            // The first validator has been replaced, so its token no longer has anything to remove.
+            token1.cancel()
+
+            try await db.exec("BEGIN")
+            try await db.exec("CREATE TABLE test1(id INT)")
+            try await db.exec("COMMIT")
+            #expect(calls1.count() == 0)
+            #expect(calls2.count() == 1)
+
+            token2.cancel()
+
+            try await db.exec("BEGIN")
+            try await db.exec("CREATE TABLE test2(id INT)")
+            try await db.exec("COMMIT")
+            #expect(calls2.count() == 1)
+        }
+    }
+
+    @Test
+    func cancellingReplacedAuthorizerValidatorKeepsCurrentOne() async throws {
+        try await withOpenedConnection { db in
+            let calls1 = Box<Void>()
+            let calls2 = Box<Void>()
+
+            let token1 = try await db.setAuthorizerValidator(lifetime: .pinned) { _ in calls1.append(()); return .allow }
+            let token2 = try await db.setAuthorizerValidator(lifetime: .pinned) { _ in calls2.append(()); return .allow }
+
+            // The first validator has been replaced, so its token no longer has anything to remove.
+            token1.cancel()
+
+            try await db.exec("SELECT 1")
+            #expect(calls1.count() == 0)
+            let callsBeforeCancel = calls2.count()
+            #expect(callsBeforeCancel > 0)
+
+            token2.cancel()
+
+            try await db.exec("SELECT 1")
+            #expect(calls2.count() == callsBeforeCancel)
+        }
+    }
+
+    @Test
     func multipleObserversWithValidator() async throws {
         try await withOpenedConnection { db in
             let observer1 = Box<Void>()
@@ -456,20 +544,19 @@ private extension SQLiteConnection {
 /// We deliberately avoid `actor` here so hook callbacks (which are synchronous
 /// and run on SQLite’s internal thread) can record events deterministically
 /// without spawning Tasks and introducing scheduling races.
-private final class Box<Element>: @unchecked Sendable {
-    private let lock = NIOLock()
-    private var items: [Element] = []
+private final class Box<Element: Sendable>: Sendable {
+    private let items = Mutex<[Element]>([])
 
     func append(_ item: Element) {
-        lock.withLockVoid { items.append(item) }
+        self.items.withLock { $0.append(item) }
     }
 
     func count() -> Int {
-        lock.withLock { items.count }
+        self.items.withLock { $0.count }
     }
 
     func all() -> [Element] {
-        lock.withLock { items }
+        self.items.withLock { $0 }
     }
 }
 

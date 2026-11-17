@@ -4,18 +4,12 @@ import FoundationEssentials
 import Foundation
 #endif
 import Logging
-import NIOCore
-import NIOPosix
-#if canImport(FoundationEssentials)
-import NIOFoundationEssentialsCompat
-#else
-import NIOFoundationCompat
-#endif
+import Synchronization
 import SQLiteNIO
 import Testing
 
-/// Run the provided closure with an opened ``SQLiteConnection`` using an in-memory database and the singleton thread
-/// pool and event loop, guaranteeing that the connection is correctly cleaned up afterwards regardless of errors.
+/// Run the provided closure with an opened ``SQLiteConnection`` using an in-memory database and the shared thread
+/// pool, guaranteeing that the connection is correctly cleaned up afterwards regardless of errors.
 func withOpenedConnection<T>(
     _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
 ) async throws -> T {
@@ -33,6 +27,16 @@ func withOpenedConnection<T>(
 
 }
 
+/// A `TaskExecutor` that runs jobs inline on the enqueueing thread, counting each enqueue.
+final class CountingInlineExecutor: TaskExecutor {
+    let enqueueCount = Mutex(0)
+
+    func enqueue(_ job: consuming ExecutorJob) {
+        self.enqueueCount.withLock { $0 += 1 }
+        unsafe job.runSynchronously(on: self.asUnownedTaskExecutor())
+    }
+}
+
 @Suite("Base SQLiteNIO tests")
 struct SQLiteNIOTests {
     @Test
@@ -41,18 +45,59 @@ struct SQLiteNIOTests {
             let rows = try await conn.query("SELECT sqlite_version()")
 
             #expect(rows.count == 1)
+            // The version reported from the header must match the library actually compiled in.
+            #expect(rows.first?.column("sqlite_version()")?.string == SQLiteConnection.libraryVersionString())
             await #expect(throws: Never.self) { try await conn.query("PRAGMA compile_options") }
         }
     }
 
     @Test
-    func connectionClosedThreadPool() async throws {
-        let threadPool = NIOThreadPool(numberOfThreads: 1)
-        try await threadPool.shutdownGracefully()
+    func customExecutorReceivesConnectionWork() async throws {
+        let executor = CountingInlineExecutor()
+        let connection = try await SQLiteConnection.open(storage: .memory, executor: executor)
 
-        // This should error, but not create a leaking promise fatal error
-        await #expect(throws: (any Error).self) { try await SQLiteConnection.open(storage: .memory, threadPool: threadPool, on: MultiThreadedEventLoopGroup.singleton.any()) }
+        do {
+            _ = try await connection.query("SELECT 1")
+            try await connection.close()
+        } catch {
+            try? await connection.close()
+            throw error
+        }
+
+        // Opening, querying, and closing must each have hopped to the provided executor.
+        #expect(executor.enqueueCount.withLock { $0 } >= 3)
     }
+
+    #if !os(WASI) // The pool runs jobs inline on WASI, so a backlog can never form.
+    @Test(.timeLimit(.minutes(1)))
+    func sharedPoolRunsEveryJobInABacklog() async {
+        final class State: Sendable {
+            let isGateOpen = Atomic(false)
+            let completed = Atomic(0)
+        }
+        let state = State()
+        let pool = SQLiteThreadPool.shared
+        let jobCount = 20_000
+
+        await withTaskGroup(of: Void.self) { group in
+            // Occupy every worker (far more blockers than any machine has cores), so that the jobs added
+            // below pile up in the pool's queue instead of being run as they arrive.
+            for _ in 0 ..< 256 {
+                group.addTask(executorPreference: pool) {
+                    while !state.isGateOpen.load(ordering: .acquiring) {}
+                }
+            }
+            for _ in 0 ..< jobCount {
+                group.addTask(executorPreference: pool) {
+                    state.completed.add(1, ordering: .relaxed)
+                }
+            }
+            state.isGateOpen.store(true, ordering: .releasing)
+        }
+
+        #expect(state.completed.load(ordering: .relaxed) == jobCount)
+    }
+    #endif
 
     @Test
     func zeroLengthBlob() async throws {
@@ -109,6 +154,38 @@ struct SQLiteNIOTests {
     }
 
     @Test
+    func floatToIntegerConversion() {
+        #expect(SQLiteData.float(1.9).integer == 1)
+        #expect(SQLiteData.float(-1.9).integer == -1)
+        #expect(SQLiteData.float(-0.0).integer == 0)
+        #expect(SQLiteData.float(.infinity).integer == nil)
+        #expect(SQLiteData.float(-.infinity).integer == nil)
+        #expect(SQLiteData.float(.nan).integer == nil)
+        #expect(SQLiteData.float(1e300).integer == nil)
+        #expect(SQLiteData.float(-1e300).integer == nil)
+        // 2^63 is one past `Int64.max`; -2^63 is exactly `Int64.min`.
+        #expect(SQLiteData.float(9_223_372_036_854_775_808.0).integer == nil)
+        #expect(SQLiteData.float(-9_223_372_036_854_775_808.0).integer == .min)
+    }
+
+    @Test
+    func integerConversionFailsWhenOutOfRange() {
+        #expect(Int8(sqliteData: .integer(127)) == 127)
+        #expect(Int8(sqliteData: .integer(128)) == nil)
+        #expect(Int8(sqliteData: .integer(-129)) == nil)
+        #expect(UInt8(sqliteData: .integer(-1)) == nil)
+        #expect(UInt64(sqliteData: .integer(-1)) == nil)
+        #expect(Int64(sqliteData: .integer(.max)) == Int64(SQLiteInt64.max))
+        #expect(Int(sqliteData: .text("1")) == nil)
+        // Fits in `Int` on 64-bit platforms only.
+        #expect(Int(sqliteData: .integer(5_000_000_000)) == Int(exactly: 5_000_000_000 as Int64))
+
+        #expect(UInt64.max.sqliteData == nil)
+        #expect(UInt64(Int64.max).sqliteData == .integer(.max))
+        #expect(Int8.min.sqliteData == .integer(-128))
+    }
+
+    @Test
     func timestampStorageInDateColumnIntegralValue() async throws {
         try await withOpenedConnection { conn in
             let date = Date(timeIntervalSince1970: 42)
@@ -118,7 +195,7 @@ struct SQLiteNIOTests {
             _ = try await conn.query(#"INSERT INTO test (date) VALUES (?)"#, [date.sqliteData!])
             let rows = try await conn.query("SELECT * FROM test")
 
-            #expect(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(Int(date.timeIntervalSince1970)))
+            #expect(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(SQLiteInt64(date.timeIntervalSince1970)))
             #expect(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description == date.description)
         }
     }
@@ -128,7 +205,7 @@ struct SQLiteNIOTests {
         try await withOpenedConnection { conn in
             let rows = try await conn.query("SELECT 1 as foo, 2 as foo")
             let row0 = try #require(rows.first)
-            var i = 0
+            var i: SQLiteInt64 = 0
             for column in row0.columns {
                 #expect(column.name == "foo")
                 i += column.data.integer ?? 0
@@ -147,7 +224,7 @@ struct SQLiteNIOTests {
             _ = try await conn.query(#"INSERT INTO scores (score) VALUES (?), (?), (?)"#, [.integer(3), .integer(4), .integer(5)])
 
             struct MyAggregate: SQLiteCustomAggregate {
-                var sum: Int = 0
+                var sum: SQLiteInt64 = 0
                 mutating func step(_ values: [SQLiteData]) throws {
                     self.sum += (values.first?.integer ?? 0)
                 }
@@ -176,13 +253,6 @@ struct SQLiteNIOTests {
             let rows = try await conn.query("SELECT my_custom_function(2) as my_value")
             #expect(rows.first?.column("my_value")?.integer == 6)
         }
-    }
-
-    @Test
-    func singletonEventLoopOpen() async throws {
-        var conn: SQLiteConnection? = nil
-        await #expect(throws: Never.self) { conn = try await SQLiteConnection.open(storage: .memory).get() }
-        try await conn?.close().get()
     }
 
     @Test

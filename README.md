@@ -7,13 +7,13 @@
 [![MIT License](https://design.vapor.codes/images/mitlicense.svg)](./LICENSE)
 [![Continuous Integration](https://img.shields.io/github/actions/workflow/status/vapor/sqlite-nio/test.yml?event=push&style=plastic&logo=github&label=tests&logoColor=ccc)](https://github.com/vapor/sqlite-nio/actions/workflows/test.yml)
 [![Code Coverage](https://img.shields.io/codecov/c/github/vapor/sqlite-nio?style=plastic&logo=codecov&label=codecov)](https://codecov.io/github/vapor/sqlite-nio)
-[![Swift 6.1+](https://design.vapor.codes/images/swift61up.svg)](https://swift.org)
+[![Swift 6.3+](https://design.vapor.codes/images/swift63up.svg)](https://swift.org)
 
 </div>
 
 <br>
 
-🪶 Non-blocking, event-driven Swift client for [SQLite](https://sqlite.org) built on [SwiftNIO](https://github.com/apple/swift-nio).
+🪶 Non-blocking Swift client for [SQLite](https://sqlite.org) built on Swift Concurrency.
 
 ## Using SQLiteNIO
 
@@ -27,9 +27,9 @@ dependencies: [
 
 ### Supported Platforms
 
-SQLiteNIO supports all platforms on which NIO itself works. At the time of this writing, these include:
+SQLiteNIO supports all platforms with a Swift 6.3+ toolchain. At the time of this writing, these include:
 
-- Ubuntu 20.04+
-- macOS 10.15+
-- iOS 13+
-- tvOS 13+ and watchOS 7+ (experimental)
+- Ubuntu 22.04+
+- macOS 15+
+- iOS 18+
+- tvOS 18+, watchOS 11+, and visionOS 2+
