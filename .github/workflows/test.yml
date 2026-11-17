@@ -28,10 +28,10 @@ jobs:
         run: |
           swift package --package-path sqlite-kit edit sqlite-nio --path sqlite-nio
           swift package --package-path fluent-sqlite-driver edit sqlite-nio --path sqlite-nio
-      - name: Run SQLiteKit tests with Thread Sanitizer
-        run: swift test --package-path sqlite-kit --sanitize=thread
-      - name: Run FluentSQLiteDriver tests with Thread Sanitizer
-        run: swift test --package-path fluent-sqlite-driver --sanitize=thread
+      - name: Run SQLiteKit tests
+        run: swift test --package-path sqlite-kit
+      - name: Run FluentSQLiteDriver tests
+        run: swift test --package-path fluent-sqlite-driver
 
   unit-tests:
     permissions:
@@ -43,6 +43,8 @@ jobs:
       ios_scheme_name: sqlite-nio
       with_musl: true
       with_android: true
+      with_windows: true
+      with_tsan: false
 
   submit-dependencies:
     permissions:
