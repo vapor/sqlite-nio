@@ -740,21 +740,39 @@ extension SQLiteConnection {
 // MARK: - Low-Level C Hook Implementation
 
 extension SQLiteConnection {
+    /// The connection as the context pointer handed to SQLite when installing a hook.
+    ///
+    /// The pointer is unretained. SQLite only invokes a hook from inside a call made on this connection's
+    /// handle, and every such call is made through this connection, so the connection is alive whenever the
+    /// pointer is used. ``clearAllHooks()`` removes the hooks before the handle is closed.
+    private var hookContext: UnsafeMutableRawPointer {
+        unsafe Unmanaged.passUnretained(self).toOpaque()
+    }
+
+    /// Recover the connection from the context pointer SQLite passed to a hook callback.
+    ///
+    /// `context` must be a pointer produced by ``hookContext``.
+    private static func connection(forHookContext context: UnsafeMutableRawPointer?) -> SQLiteConnection? {
+        guard let context = unsafe context else { return nil }
+        return unsafe Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
+    }
+
     /// Must be run on the connection's executor.
     fileprivate func applyUpdateHook(enabled: Bool) {
         guard enabled else {
-            _ = sqlite_nio_sqlite3_update_hook(self.handle.raw, nil, nil)
+            _ = unsafe sqlite_nio_sqlite3_update_hook(self.handle.raw, nil, nil)
             return
         }
 
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        _ = sqlite_nio_sqlite3_update_hook(self.handle.raw, { context, operation, database, table, row in
-            guard let context, let database, let table else { return }
-            let operation = SQLiteUpdateOperation(rawValue: operation)
-            let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
-            let event = SQLiteUpdateEvent(operation: operation,
-                                          database: String(cString: database),
-                                          table: String(cString: table),
+        _ = unsafe sqlite_nio_sqlite3_update_hook(self.handle.raw, { context, operation, database, table, row in
+            guard let connection = unsafe SQLiteConnection.connection(forHookContext: context),
+                  let database = unsafe database.map(String.init(cString:)),
+                  let table = unsafe table.map(String.init(cString:))
+            else { return }
+
+            let event = SQLiteUpdateEvent(operation: SQLiteUpdateOperation(rawValue: operation),
+                                          database: database,
+                                          table: table,
                                           rowID: row)
             // Copy callbacks while locked, then invoke unlocked (avoid deadlock)
             let callbacks = connection.withBuckets { Array($0.updateHooks.values) }
@@ -762,21 +780,19 @@ extension SQLiteConnection {
             for callback in callbacks {
                 callback(event)
             }
-        }, context)
+        }, self.hookContext)
     }
 
     /// Must be run on the connection's executor.
     fileprivate func applyCommitHook(enabled: Bool) {
         guard enabled else {
-            _ = sqlite_nio_sqlite3_commit_hook(self.handle.raw, nil, nil)
+            _ = unsafe sqlite_nio_sqlite3_commit_hook(self.handle.raw, nil, nil)
             return
         }
 
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        _ = sqlite_nio_sqlite3_commit_hook(self.handle.raw, { context in
-            guard let context else { return 0 }
+        _ = unsafe sqlite_nio_sqlite3_commit_hook(self.handle.raw, { context in
+            guard let connection = unsafe SQLiteConnection.connection(forHookContext: context) else { return 0 }
 
-            let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
             let event = SQLiteCommitEvent()
             // Copy validator and observers while locked, then invoke unlocked (avoid deadlock)
             let (validator, observers): (SQLiteCommitValidator?, [SQLiteCommitObserver]) =
@@ -795,21 +811,19 @@ extension SQLiteConnection {
             }
 
             return 0 // allow commit
-        }, context)
+        }, self.hookContext)
     }
 
     /// Must be run on the connection's executor.
     fileprivate func applyRollbackHook(enabled: Bool) {
         guard enabled else {
-            _ = sqlite_nio_sqlite3_rollback_hook(self.handle.raw, nil, nil)
+            _ = unsafe sqlite_nio_sqlite3_rollback_hook(self.handle.raw, nil, nil)
             return
         }
 
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        _ = sqlite_nio_sqlite3_rollback_hook(self.handle.raw, { context in
-            guard let context else { return }
+        _ = unsafe sqlite_nio_sqlite3_rollback_hook(self.handle.raw, { context in
+            guard let connection = unsafe SQLiteConnection.connection(forHookContext: context) else { return }
 
-            let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
             let event = SQLiteRollbackEvent()
 
             // Copy callbacks while locked, then invoke unlocked (avoid deadlock)
@@ -818,27 +832,26 @@ extension SQLiteConnection {
             for callback in callbacks {
                 callback(event)
             }
-        }, context)
+        }, self.hookContext)
     }
 
     /// Must be run on the connection's executor.
     fileprivate func applyAuthorizerHook(enabled: Bool) {
         guard enabled else {
-            _ = sqlite_nio_sqlite3_set_authorizer(self.handle.raw, nil, nil)
+            _ = unsafe sqlite_nio_sqlite3_set_authorizer(self.handle.raw, nil, nil)
             return
         }
 
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        _ = sqlite_nio_sqlite3_set_authorizer(self.handle.raw, { context, action, parameter1, parameter2, database, trigger in
-            guard let context else { return SQLiteAuthorizerResponse.deny.rawValue }
+        _ = unsafe sqlite_nio_sqlite3_set_authorizer(self.handle.raw, { context, action, parameter1, parameter2, database, trigger in
+            guard let connection = unsafe SQLiteConnection.connection(forHookContext: context) else {
+                return SQLiteAuthorizerResponse.deny.rawValue
+            }
 
-            let actionType = SQLiteAuthorizerAction(rawValue: action)
-            let connection = Unmanaged<SQLiteConnection>.fromOpaque(context).takeUnretainedValue()
-            let event = SQLiteAuthorizerEvent(action: actionType,
-                                              parameter1: parameter1.map { String(cString: $0) },
-                                              parameter2: parameter2.map { String(cString: $0) },
-                                              database: database.map { String(cString: $0) },
-                                              trigger: trigger.map { String(cString: $0) })
+            let event = unsafe SQLiteAuthorizerEvent(action: SQLiteAuthorizerAction(rawValue: action),
+                                                     parameter1: parameter1.map(String.init(cString:)),
+                                                     parameter2: parameter2.map(String.init(cString:)),
+                                                     database: database.map(String.init(cString:)),
+                                                     trigger: trigger.map(String.init(cString:)))
             // Copy validator and observers while locked, then invoke unlocked (avoid deadlock)
             let (validator, observers) = connection.withBuckets { buckets in
                 (buckets.authorizerValidator, Array(buckets.authorizerObservers.values))
@@ -856,7 +869,7 @@ extension SQLiteConnection {
             }
 
             return validatorResponse.rawValue
-        }, context)
+        }, self.hookContext)
     }
 
     /// Must be run on the connection's executor.
