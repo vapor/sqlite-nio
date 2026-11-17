@@ -12,7 +12,7 @@ import VaporCSQLite
     init(query: String, on connection: SQLiteConnection) throws {
         self.connection = connection
         
-        let ret = sqlite_nio_sqlite3_prepare_v3(
+        let ret = unsafe sqlite_nio_sqlite3_prepare_v3(
             connection.handle.raw,
             query,
             -1,
@@ -35,7 +35,7 @@ import VaporCSQLite
     private mutating func check(_ ret: Int32) throws {
         // We check it this way so that `SQLITE_DONE` causes a finalize without throwing an error.
         if ret != SQLITE_OK, let handle = self.handle {
-            sqlite_nio_sqlite3_finalize(handle)
+            unsafe sqlite_nio_sqlite3_finalize(handle)
             self.handle = nil
         }
         
@@ -50,8 +50,8 @@ import VaporCSQLite
             
             switch bind {
             case .blob(let value):
-                ret = value.withUnsafeBytes {
-                    sqlite_nio_sqlite3_bind_blob64(self.handle, i, $0.baseAddress, UInt64($0.count), SQLITE_TRANSIENT)
+                ret = unsafe value.withUnsafeBytes {
+                    unsafe sqlite_nio_sqlite3_bind_blob64(self.handle, i, $0.baseAddress, UInt64($0.count), SQLITE_TRANSIENT)
                 }
             case .float(let value):
                 ret = sqlite_nio_sqlite3_bind_double(self.handle, i, value)
@@ -60,7 +60,7 @@ import VaporCSQLite
             case .null:
                 ret = sqlite_nio_sqlite3_bind_null(self.handle, i)
             case .text(let value):
-                ret = sqlite_nio_sqlite3_bind_text64(self.handle, i, value, UInt64(value.utf8.count), SQLITE_TRANSIENT, UInt8(SQLITE_UTF8))
+                ret = unsafe sqlite_nio_sqlite3_bind_text64(self.handle, i, value, UInt64(value.utf8.count), SQLITE_TRANSIENT, UInt8(SQLITE_UTF8))
             }
             try self.check(ret)
         }
@@ -106,14 +106,14 @@ import VaporCSQLite
         case SQLITE_FLOAT:
             return .float(.init(sqlite_nio_sqlite3_column_double(self.handle, offset)))
         case SQLITE_TEXT:
-            guard let val = sqlite_nio_sqlite3_column_text(self.handle, offset) else {
+            guard let val = unsafe sqlite_nio_sqlite3_column_text(self.handle, offset) else {
                 throw SQLiteError(reason: .error, message: "Unexpected nil column text")
             }
-            return .text(.init(cString: val))
+            return unsafe .text(.init(cString: val))
         case SQLITE_BLOB:
             let length = Int(sqlite_nio_sqlite3_column_bytes(self.handle, offset))
-            if let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) {
-                return .blob(Data(bytes: blobPointer, count: length))
+            if let blobPointer = unsafe sqlite_nio_sqlite3_column_blob(self.handle, offset) {
+                return unsafe .blob(Data(bytes: blobPointer, count: length))
             } else {
                 return .blob(Data())
             }
@@ -125,12 +125,12 @@ import VaporCSQLite
     }
 
     private func column(at offset: Int32) throws -> String {
-        guard let cName = sqlite_nio_sqlite3_column_name(self.handle, offset) else {
+        guard let cName = unsafe sqlite_nio_sqlite3_column_name(self.handle, offset) else {
             throw SQLiteError(reason: .error, message: "Unexpectedly found a nil column name at offset \(offset)")
         }
-        return String(cString: cName)
+        return unsafe String(cString: cName)
     }
 }
 
-let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+let SQLITE_TRANSIENT = unsafe unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
