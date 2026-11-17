@@ -146,7 +146,7 @@ extension SQLiteData {
         case SQLITE_BLOB:
             if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
                 let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
-                let data = Data(bytes: UnsafeRawBufferPointer(start: bytes, count: count))
+                let data = Data(bytes: bytes, count: count)
 
                 self = .blob(data) // copy bytes
             } else {
