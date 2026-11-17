@@ -243,24 +243,6 @@ struct DatabaseFunctionTests {
         }
     }
 
-    /*
-    @Test
-    func functionThrowingNSError() async throws {
-        try await withOpenedConnection { conn in
-            let fn = SQLiteCustomFunction("f") { _ in
-                throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message", NSLocalizedFailureReasonErrorKey: "custom error message"])
-            }
-            try await conn.install(customFunction: fn)
-
-            let error = try await #require(throws: SQLiteError.self) { try await conn.query("SELECT f()") }
-            #expect(error.reason == .error)
-            #expect(error.message.contains("CustomErrorDomain"))
-            #expect(error.message.contains("123"))
-            #expect(error.message.contains("custom error message"), "expected '\(error.message)' to contain 'custom error message'")
-        }
-    }
-    */
-
     // MARK: - Misc
 
     @Test
