@@ -32,7 +32,7 @@ extension FixedWidthInteger {
     }
 
     public var sqliteData: SQLiteData? {
-        .integer(numericCast(self))
+        SQLiteInt64(exactly: self).map { .integer($0) }
     }
 }
 

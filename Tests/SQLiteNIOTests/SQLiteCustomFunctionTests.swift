@@ -53,7 +53,7 @@ struct DatabaseFunctionTests {
         try await withOpenedConnection { conn in
             let fn = SQLiteCustomFunction("f", argumentCount: 0) { values in 1 }
             try await conn.install(customFunction: fn)
-            #expect(try await Int(1) == conn.query("SELECT f() as result").first?.column("result")?.integer)
+            #expect(try await 1 == conn.query("SELECT f() as result").first?.column("result")?.integer)
         }
     }
 

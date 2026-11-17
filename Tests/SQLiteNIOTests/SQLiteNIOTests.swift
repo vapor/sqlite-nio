@@ -129,6 +129,12 @@ struct SQLiteNIOTests {
         #expect(UInt64(sqliteData: .integer(-1)) == nil)
         #expect(Int64(sqliteData: .integer(.max)) == Int64(SQLiteInt64.max))
         #expect(Int(sqliteData: .text("1")) == nil)
+        // Fits in `Int` on 64-bit platforms only.
+        #expect(Int(sqliteData: .integer(5_000_000_000)) == Int(exactly: 5_000_000_000 as Int64))
+
+        #expect(UInt64.max.sqliteData == nil)
+        #expect(UInt64(Int64.max).sqliteData == .integer(.max))
+        #expect(Int8.min.sqliteData == .integer(-128))
     }
 
     @Test
@@ -141,7 +147,7 @@ struct SQLiteNIOTests {
             _ = try await conn.query(#"INSERT INTO test (date) VALUES (?)"#, [date.sqliteData!])
             let rows = try await conn.query("SELECT * FROM test")
 
-            #expect(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(Int(date.timeIntervalSince1970)))
+            #expect(rows.first?.column("date") == .float(date.timeIntervalSince1970) || rows.first?.column("date") == .integer(SQLiteInt64(date.timeIntervalSince1970)))
             #expect(rows.first?.column("date").flatMap(Date.init(sqliteData:))?.description == date.description)
         }
     }
@@ -151,7 +157,7 @@ struct SQLiteNIOTests {
         try await withOpenedConnection { conn in
             let rows = try await conn.query("SELECT 1 as foo, 2 as foo")
             let row0 = try #require(rows.first)
-            var i = 0
+            var i: SQLiteInt64 = 0
             for column in row0.columns {
                 #expect(column.name == "foo")
                 i += column.data.integer ?? 0
@@ -170,7 +176,7 @@ struct SQLiteNIOTests {
             _ = try await conn.query(#"INSERT INTO scores (score) VALUES (?), (?), (?)"#, [.integer(3), .integer(4), .integer(5)])
 
             struct MyAggregate: SQLiteCustomAggregate {
-                var sum: Int = 0
+                var sum: SQLiteInt64 = 0
                 mutating func step(_ values: [SQLiteData]) throws {
                     self.sum += (values.first?.integer ?? 0)
                 }
