@@ -41,9 +41,11 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
 
     static var defaultThreadCount: Int {
         #if os(Windows)
-        var info = SYSTEM_INFO()
-        unsafe GetSystemInfo(&info)
-        return max(1, Int(info.dwNumberOfProcessors))
+        let info = UnsafeMutablePointer<SYSTEM_INFO>.allocate(capacity: 1)
+        defer { unsafe info.deallocate() }
+        unsafe GetSystemInfo(info)
+        let processorCount = unsafe info.pointee.dwNumberOfProcessors
+        return max(1, Int(processorCount))
         #else
         return Int(max(1, sysconf(Int32(_SC_NPROCESSORS_ONLN))))
         #endif
@@ -60,7 +62,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
         self.queue.push(UnownedJob(job))
     }
 
-    private func workerLoop() {
+    private func workerLoop() -> Never {
         let unownedExecutor = unsafe self.asUnownedTaskExecutor()
         while true {
             unsafe self.queue.pop().runSynchronously(on: unownedExecutor)
@@ -85,29 +87,28 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
         #if os(Windows)
         let handle = unsafe CreateThread(nil, SIZE_T(workerStackSize), { arg in
             let context = unsafe Unmanaged<Context>.fromOpaque(arg!).takeRetainedValue()
-            _ = unsafe context.name.withCString(encodedAs: UTF16.self) {
-                unsafe SetThreadDescription(GetCurrentThread(), $0)
-            }
+            // Work around 6.3/6.4 differences in safety
+            let wideName = Array(context.name.utf16) + [0]
+            _ = unsafe SetThreadDescription(GetCurrentThread(), wideName)
             context.pool.workerLoop()
-            return 0
         }, context, 0, nil)
         precondition(unsafe handle != nil, "SQLiteThreadPool failed to spawn a worker thread (error \(GetLastError()))")
         unsafe CloseHandle(handle)
         #else
 
-        var attr = pthread_attr_t()
-        precondition(unsafe pthread_attr_init(&attr) == 0)
-        precondition(unsafe pthread_attr_setstacksize(&attr, workerStackSize) == 0)
-        defer { unsafe pthread_attr_destroy(&attr) }
+        let attributes = UnsafeMutablePointer<pthread_attr_t>.allocate(capacity: 1)
+        defer { unsafe attributes.deallocate() }
+        precondition(unsafe pthread_attr_init(attributes) == 0)
+        defer { unsafe pthread_attr_destroy(attributes) }
+        precondition(unsafe pthread_attr_setstacksize(attributes, workerStackSize) == 0)
 
         // Handle pthread differences between platforms, such as `pthread_t` being a pointer on Darwin and Musl, but integer on Glibc and Android
         #if canImport(Darwin)
         var tid: pthread_t? = nil
-        let createRet = unsafe pthread_create(&tid, &attr, { arg in
+        let createRet = unsafe pthread_create(&tid, attributes, { arg in
             let context = unsafe Unmanaged<Context>.fromOpaque(arg).takeRetainedValue()
             unsafe pthread_setname_np(context.name)
             context.pool.workerLoop()
-            return nil
         }, context)
         #else
         #if canImport(Musl)
@@ -115,10 +116,11 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
         #else
         var tid = pthread_t()
         #endif
-        let createRet = unsafe pthread_create(&tid, &attr, { arg in
-            let context = unsafe Unmanaged<Context>.fromOpaque(arg!).takeRetainedValue()
+        let createRet = unsafe pthread_create(&tid, attributes, { arg in
+            // If this is optional or not differs between platforms and platform versions
+            let argument: UnsafeMutableRawPointer? = unsafe arg
+            let context = unsafe Unmanaged<Context>.fromOpaque(argument!).takeRetainedValue()
             context.pool.workerLoop()
-            return nil
         }, context)
         #endif
         precondition(createRet == 0, "SQLiteThreadPool failed to spawn a worker thread (error \(createRet))")
