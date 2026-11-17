@@ -1,3 +1,5 @@
+import Synchronization
+
 /// A protocol describing the minimum requirements for an object allowing access to a generic SQLite database.
 ///
 /// This protocol is intended to assist with connection pooling and other "smells like a simple database but isn't"
@@ -12,11 +14,12 @@ public protocol SQLiteDatabase: Sendable {
     /// - Parameters:
     ///   - query: The query string to execute.
     ///   - binds: An ordered list of ``SQLiteData`` items to use as bound parameters for the query.
-    ///   - onRow: A closure to invoke for each result row returned by the query, if any.
+    ///   - onRow: A closure to invoke for each result row returned by the query, if any. It may be called on
+    ///     a different thread from the caller, and is never called after this method returns.
     func query(
         _ query: String,
         _ binds: [SQLiteData],
-        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+        _ onRow: @Sendable (SQLiteRow) -> Void
     ) async throws
 
     /// Call the provided closure with a concrete ``SQLiteConnection`` instance, concurrency version.
@@ -30,7 +33,7 @@ public protocol SQLiteDatabase: Sendable {
     ///   or throws.
     /// - Returns: The closure's result, if any.
     func withConnection<T>(
-        _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
+        _ closure: @Sendable (SQLiteConnection) async throws -> T
     ) async throws -> T
 }
 
@@ -39,10 +42,10 @@ extension SQLiteDatabase {
     /// Wrapper for ``query(_:_:_:)`` which returns the result rows (if any) rather than calling a
     /// closure (async version).
     public func query(_ query: String, _ binds: [SQLiteData] = []) async throws -> [SQLiteRow] {
-        nonisolated(unsafe) var rows: [SQLiteRow] = []
+        let rows = Mutex<[SQLiteRow]>([])
 
-        try await self.query(query, binds) { rows.append($0) }
-        return rows
+        try await self.query(query, binds) { row in rows.withLock { $0.append(row) } }
+        return rows.withLock { $0 }
     }
 }
 
@@ -53,12 +56,12 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     let database: D
     
     // See `SQLiteDatabase.withConnection(_:)`.
-    func withConnection<T: Sendable>(_ closure: @escaping @Sendable (SQLiteConnection) async throws -> T) async throws -> T {
+    func withConnection<T: Sendable>(_ closure: @Sendable (SQLiteConnection) async throws -> T) async throws -> T {
         try await self.database.withConnection(closure)
     }
 
     // See `SQLiteDatabase.query(_:_:_:)`.
-    func query(_ query: String, _ binds: [SQLiteData], _ onRow: @escaping @Sendable (SQLiteRow) -> Void) async throws {
+    func query(_ query: String, _ binds: [SQLiteData], _ onRow: @Sendable (SQLiteRow) -> Void) async throws {
         try await self.database.query(query, binds, onRow)
     }
     

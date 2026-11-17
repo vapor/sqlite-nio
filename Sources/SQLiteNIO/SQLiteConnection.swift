@@ -237,7 +237,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
 
     /// Run `work` with a preference for this connection's executor, keeping blocking libsqlite3
     /// calls off of the default concurrency executor's threads.
-    func onExecutor<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
+    func onExecutor<T: Sendable>(_ work: @Sendable () throws -> T) async throws -> T {
         try await withTaskExecutorPreference(self.executor) {
             try work()
         }
@@ -269,7 +269,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
 
     // See `SQLiteDatabase.withConnection(_:)`.
     public func withConnection<T>(
-        _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
+        _ closure: @Sendable (SQLiteConnection) async throws -> T
     ) async throws -> T {
         try await closure(self)
     }
@@ -278,7 +278,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     public func query(
         _ query: String,
         _ binds: [SQLiteData],
-        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+        _ onRow: @Sendable (SQLiteRow) -> Void
     ) async throws {
         try await self.onExecutor {
             var statement = try SQLiteStatement(query: query, on: self)
