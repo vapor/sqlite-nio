@@ -1,17 +1,3 @@
-#if canImport(Darwin)
-import Darwin.C
-#elseif canImport(Glibc)
-@preconcurrency import Glibc
-#elseif canImport(Musl)
-@preconcurrency import Musl
-#elseif canImport(Android)
-@preconcurrency import Android
-#elseif os(WASI)
-import WASILibc
-#elseif os(Windows)
-import CRT
-#endif
-
 #if canImport(FoundationEssentials)
 public import FoundationEssentials
 #else
@@ -128,49 +114,26 @@ extension Date: SQLiteDataConvertible {
             value = Double(v)
         case .text(let v):
             // N.B. ISO8601FormatStyle is MUCH MUCH faster than DateFormatter
-            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
-                guard let d =
-                    // Parse as strict ISO8601
-                    (try? Date(v, strategy: .iso8601)) ??
-                    // Parse as strict ISO8601 with ' ' instead of 'T'
-                    (try? Date(v, strategy: .iso8601.dateTimeSeparator(.space))) ??
-                    // Parse as ISO8601 with ' ' instead of 'T' and no timezone.
-                    (try? Date(v, strategy: .iso8601.dateTimeSeparator(.space).year().month().day().time(includingFractionalSeconds: false))) ??
-                    // Parse as ISO8601 with date but no time.
-                    (try? Date(v, strategy: .iso8601.year().month().day()))
-                else {
-                    return nil
-                }
-                self = d
-            } else {
-                // In practice, this abomination should never actually run, since nobody should actually
-                // be running on Catalina or Big Sur. But because Hyrum's Law, just in case they are,
-                // this code actually does work. It's ugly, but it works. And deeply sadly, it too is
-                // much, much faster than ISO8601DateFormatter... More importantly, it allows us to actually
-                // stick to importing FoundationEssentials.
-                var stm = tm(
-                    tm_sec: 0, tm_min: 0, tm_hour: 0, tm_mday: 0, tm_mon: 0, tm_year: 0,
-                    tm_wday: -1, tm_yday: -1, tm_isdst: 0, tm_gmtoff: 0, tm_zone: nil
-                )
-                guard v.count == 10 || v.count == 19, v.prefix(5).last == "-", v.prefix(8).last == "-",
-                      let y = Int32(v.prefix(4)), let n = Int32(v.prefix(7).suffix(2)), let d = Int32(v.prefix(10).suffix(2))
-                else { return nil }
-                (stm.tm_mday, stm.tm_mon, stm.tm_year) = (d, n - 1, y - 1900)
-                if v.count > 10 {
-                    guard v.prefix(11).last == " ", v.prefix(14).last == ":", v.prefix(17).last == ":",
-                          let h = Int32(v.prefix(13).suffix(2)), let m = Int32(v.prefix(16).suffix(2)), let s = Int32(v.suffix(2))
-                    else { return nil }
-                    (stm.tm_hour, stm.tm_min, stm.tm_sec) = (h, m, s)
-                }
-                self = Date(timeIntervalSince1970: TimeInterval(timegm(&stm)))
+            guard let d =
+                // Parse as strict ISO8601
+                (try? Date(v, strategy: .iso8601)) ??
+                // Parse as strict ISO8601 with ' ' instead of 'T'
+                (try? Date(v, strategy: .iso8601.dateTimeSeparator(.space))) ??
+                // Parse as ISO8601 with ' ' instead of 'T' and no timezone.
+                (try? Date(v, strategy: .iso8601.dateTimeSeparator(.space).year().month().day().time(includingFractionalSeconds: false))) ??
+                // Parse as ISO8601 with date but no time.
+                (try? Date(v, strategy: .iso8601.year().month().day()))
+            else {
+                return nil
             }
+            self = d
             return
         default:
             return nil
         }
         // Round to microseconds to avoid nanosecond precision error causing Dates to fail equality
         let valueSinceReferenceDate = value - Date.timeIntervalBetween1970AndReferenceDate
-        let secondsSinceReference = round(valueSinceReferenceDate * 1e6) / 1e6
+        let secondsSinceReference = (valueSinceReferenceDate * 1e6).rounded() / 1e6
         self.init(timeIntervalSinceReferenceDate: secondsSinceReference)
     }
 
