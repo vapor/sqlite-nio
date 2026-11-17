@@ -45,6 +45,8 @@ struct SQLiteNIOTests {
             let rows = try await conn.query("SELECT sqlite_version()")
 
             #expect(rows.count == 1)
+            // The version reported from the header must match the library actually compiled in.
+            #expect(rows.first?.column("sqlite_version()")?.string == SQLiteConnection.libraryVersionString())
             await #expect(throws: Never.self) { try await conn.query("PRAGMA compile_options") }
         }
     }
