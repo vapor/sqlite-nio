@@ -10,20 +10,18 @@ import Darwin
 import WinSDK
 #endif
 
-/// A fixed-width pool of dedicated worker threads used to run blocking libsqlite3 calls.
+/// A fixed-width pool of dedicated worker threads used to run blocking libsqlite3 calls to avoid
+/// blocking the default (global) concurrency executor's threads.
 ///
-/// Running libsqlite3 calls on dedicated threads keeps blocking work off of the threads belonging
-/// to the default (global) concurrency executor, which must never be blocked.
-///
-/// The ``shared`` pool is created lazily on first use and lives for the lifetime of the process;
-/// it cannot be shut down. To control where a connection's work runs, pass any `TaskExecutor` of
-/// your own to ``SQLiteConnection/open(storage:executor:)`` instead; its lifecycle is then your
-/// responsibility, and it must outlive the connection.
+/// The ``shared`` pool is created lazily on first use and lives for the lifetime of the process. 
+/// To control where a connection's work runs, pass any `TaskExecutor` of
+/// your own to ``SQLiteConnection/open(storage:executor:)`` instead and it's your
+/// responsibility to control the lifetime of, and it must outlive the connection.
 ///
 /// On single-threaded platforms (WASI), the pool has no worker threads and runs submitted work
 /// inline on the calling thread.
 public final class SQLiteThreadPool: TaskExecutor, Sendable {
-    /// The shared pool used by default for all connections.
+    /// The shared pool used by default for all connections
     public static let shared = SQLiteThreadPool(numberOfThreads: SQLiteThreadPool.defaultThreadCount)
 
     #if os(WASI)
@@ -33,7 +31,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
     init(numberOfThreads: Int) {}
 
     public func enqueue(_ job: consuming ExecutorJob) {
-        // WASI is single-threaded; run the job inline on the calling thread.
+        // WASI is single-threaded
         job.runSynchronously(on: self.asUnownedTaskExecutor())
     }
 
@@ -78,11 +76,10 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
                 self.name = name
             }
         }
-        // The worker thread runs forever, so the retained context (and thus the pool) is never released.
+        // This is never released as the thread runs forever
         let context = Unmanaged.passRetained(Context(pool: pool, name: name)).toOpaque()
 
-        // Non-main threads can get a small stack by default (512 KB on Darwin), and SQLite's
-        // parser/VDBE can recurse deeply; ask for 2 MB explicitly on every platform.
+        // 2 MB on every platform
         let workerStackSize = 1 << 21
 
         #if os(Windows)
@@ -95,7 +92,6 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
             return 0
         }, context, 0, nil)
         precondition(handle != nil, "SQLiteThreadPool failed to spawn a worker thread (error \(GetLastError()))")
-        // The thread keeps running after its handle is closed; we never join it.
         CloseHandle(handle)
         #else
 
@@ -104,16 +100,7 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
         precondition(pthread_attr_setstacksize(&attr, workerStackSize) == 0)
         defer { pthread_attr_destroy(&attr) }
 
-        // Both branches make the same pthread_create call; they differ only because the libcs
-        // import the API into Swift differently:
-        //
-        // - `pthread_t` is a pointer type on Darwin (so the out-param starts as `nil`) but an
-        //   integer type on Linux (so it starts as zero-initialized).
-        // - The thread entry point's argument imports as non-optional on Darwin and optional on
-        //   Linux (hence `arg` vs. `arg!`).
-        // - Only Darwin can name the thread: Glibc/Musl declare `pthread_setname_np` behind
-        //   `_GNU_SOURCE`, which Swift's libc modules don't expose, so worker threads go
-        //   unnamed on non-Darwin platforms.
+        // Handle pthread differences between platforms, such as `pthread_t` being a pointer on Darwin and Musl, but integer on Glibc and Android
         #if canImport(Darwin)
         var tid: pthread_t? = nil
         let createRet = pthread_create(&tid, &attr, { arg in
@@ -123,7 +110,11 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
             return nil
         }, context)
         #else
+        #if canImport(Musl)
+        var tid: pthread_t? = nil
+        #else
         var tid = pthread_t()
+        #endif
         let createRet = pthread_create(&tid, &attr, { arg in
             let context = Unmanaged<Context>.fromOpaque(arg!).takeRetainedValue()
             context.pool.workerLoop()
@@ -139,11 +130,9 @@ public final class SQLiteThreadPool: TaskExecutor, Sendable {
 }
 
 #if !os(WASI)
-/// An unbounded FIFO queue of jobs guarded by a mutex/condition-variable pair, on which
-/// idle worker threads block until work arrives.
+/// An unbounded FIFO queue of jobs guarded by a mutex/condition-variable pair to block idle worker threads until work arrives.
 ///
-/// `Synchronization.Mutex` provides no condition variable — and a blocking `pop()` needs one to
-/// park idle workers without spinning — so this uses the platform's native pair directly:
+/// We can't use `Mutex` because we need a condition variable for a blocking `pop()` so use the platform's native pair directly:
 /// pthreads on POSIX platforms, an `SRWLOCK` and `CONDITION_VARIABLE` on Windows.
 private final class JobQueue: @unchecked Sendable {
     #if os(Windows)
