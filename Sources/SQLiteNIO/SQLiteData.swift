@@ -139,15 +139,15 @@ extension SQLiteData {
         case SQLITE_FLOAT:
             self = .float(sqlite_nio_sqlite3_value_double(sqliteValue))
         case SQLITE_TEXT:
-            if let raw = sqlite_nio_sqlite3_value_text(sqliteValue) {
-                self = .text(String.init(cString: raw))
+            if let raw = unsafe sqlite_nio_sqlite3_value_text(sqliteValue) {
+                self = unsafe .text(String.init(cString: raw))
             } else {
                 self = .text("")
             }
         case SQLITE_BLOB:
-            if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
+            if let bytes = unsafe sqlite_nio_sqlite3_value_blob(sqliteValue) {
                 let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
-                let data = Data(bytes: bytes, count: count)
+                let data = unsafe Data(bytes: bytes, count: count)
 
                 self = .blob(data) // copy bytes
             } else {
