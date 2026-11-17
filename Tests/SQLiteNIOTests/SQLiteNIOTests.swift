@@ -121,6 +121,17 @@ struct SQLiteNIOTests {
     }
 
     @Test
+    func integerConversionFailsWhenOutOfRange() {
+        #expect(Int8(sqliteData: .integer(127)) == 127)
+        #expect(Int8(sqliteData: .integer(128)) == nil)
+        #expect(Int8(sqliteData: .integer(-129)) == nil)
+        #expect(UInt8(sqliteData: .integer(-1)) == nil)
+        #expect(UInt64(sqliteData: .integer(-1)) == nil)
+        #expect(Int64(sqliteData: .integer(.max)) == Int64(SQLiteInt64.max))
+        #expect(Int(sqliteData: .text("1")) == nil)
+    }
+
+    @Test
     func timestampStorageInDateColumnIntegralValue() async throws {
         try await withOpenedConnection { conn in
             let date = Date(timeIntervalSince1970: 42)

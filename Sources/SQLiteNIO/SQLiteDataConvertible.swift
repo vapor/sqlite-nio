@@ -28,7 +28,7 @@ extension FixedWidthInteger {
         guard case .integer(let value) = sqliteData else {
             return nil
         }
-        self = numericCast(value)
+        self.init(exactly: value)
     }
 
     public var sqliteData: SQLiteData? {

@@ -261,7 +261,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// Only valid until the next operation is performed on the connection; watch out for races.
     ///
     /// - Returns: The most recently inserted rowid value.
-    public func lastAutoincrementID() async throws -> Int {
+    public func lastAutoincrementID() async throws -> SQLiteInt64 {
         try await self.onExecutor {
             numericCast(sqlite_nio_sqlite3_last_insert_rowid(self.handle.raw))
         }
