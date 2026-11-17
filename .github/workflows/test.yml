@@ -44,6 +44,7 @@ jobs:
       with_musl: true
       with_android: true
       with_windows: true
+      with_wasm: true
       with_tsan: false
 
   submit-dependencies:
