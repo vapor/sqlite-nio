@@ -5,11 +5,6 @@ import Foundation
 #endif
 import Logging
 import Synchronization
-#if canImport(FoundationEssentials)
-import NIOFoundationEssentialsCompat
-#else
-import NIOFoundationCompat
-#endif
 import SQLiteNIO
 import Testing
 
